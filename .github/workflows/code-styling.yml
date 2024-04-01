@@ -1,0 +1,27 @@
+name: Code Styling
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+
+jobs:
+  pint:
+    if: "!contains(github.event.head_commit.message, 'wip')"
+    name: Pint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Fix Code Style Issues
+        uses: aglipanci/laravel-pint-action@2.3.1
+
+      - name: Commit Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Styling
