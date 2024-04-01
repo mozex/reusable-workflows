@@ -43,4 +43,4 @@ jobs:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_OAUTH_TOKEN }}"}}'
 
       - name: Analyse Code
-        run: ./vendor/bin/phpstan analyse -c ${{ inputs.config_file }} --memory-limit=-1 --error-format=github
+        run: ./vendor/bin/phpstan analyse -c ${{ inputs.larastan_config_file }} --memory-limit=-1 --error-format=github
