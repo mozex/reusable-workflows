@@ -1,0 +1,46 @@
+name: Code Analysis
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        required: false
+        description: 'GitHub Token used to merge Pull Requests.'
+    inputs:
+      php_version:
+        description: 'PHP version to be used.'
+        required: true
+        type: string
+        default: '8.3'
+      larastan_config_file:
+        description: 'Larastan configuration file.'
+        required: false
+        type: string
+        default: 'phpstan.neon.dist'
+
+permissions:
+  contents: write
+
+jobs:
+  larastan:
+    if: "!contains(github.event.head_commit.message, 'wip')"
+    name: Larastan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          coverage: none
+
+      - name: Install Composer Dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
+
+      - name: Analyse Code
+        run: ./vendor/bin/phpstan analyse -c ${{ inputs.config_file }} --memory-limit=-1 --error-format=github
