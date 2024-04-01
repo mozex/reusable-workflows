@@ -3,7 +3,7 @@ name: Code Analysis
 on:
   workflow_call:
     secrets:
-      GITHUB_TOKEN:
+      GITHUB_OAUTH_TOKEN:
         required: false
         description: 'GitHub Token used to merge Pull Requests.'
     inputs:
@@ -40,7 +40,7 @@ jobs:
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v3
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_OAUTH_TOKEN }}"}}'
 
       - name: Analyse Code
         run: ./vendor/bin/phpstan analyse -c ${{ inputs.config_file }} --memory-limit=-1 --error-format=github
