@@ -1,10 +1,17 @@
 # Reusable Workflows
 A collection of reusable GitHub Actions workflows I use in my public and private projects.
 
-## `.github/workflows/code-styling.yml`
+## Code Styling
 
-Workflow to run [Laravel Pint](https://github.com/laravel/pint) and automatically fix code style violations. Changes are pushed back to the GitHub repository.
+Workflow to run [Laravel Pint](https://github.com/laravel/pint) and automatically fix code style violations. Changes are
+pushed back to the GitHub repository.
 
+### Path
+```
+.github/workflows/code-styling.yml
+```
+
+### Code
 ```yml
 name: Code Styling
 
@@ -22,10 +29,16 @@ jobs:
     uses: mozex/reusable-workflows/.github/workflows/code-styling.yml@main
 ```
 
-## `.github/workflows/code-analysis.yml`
+## Code Analysis
 
 Workflow to run [Larastan](https://github.com/larastan/larastan) in projects.
 
+### Path
+```
+.github/workflows/code-analysis.yml
+```
+
+### Code
 ```yml
 name: Code Analysis
 
