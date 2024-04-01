@@ -42,7 +42,7 @@ jobs:
     name: Code Analysis
     uses: mozex/reusable-workflows/.github/workflows/code-analysis.yml@main
     secrets:
-      GITHUB_OAUTH_TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
+      TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
     with:
       php_version: '8.3'
       larastan_config_file: 'phpstan.php'
