@@ -1,6 +1,15 @@
 # Reusable Workflows
 A collection of reusable GitHub Actions workflows I use in my public and private projects.
 
+- [Code Styling](#code-styling)
+- [Code Analysis](#code-analysis)
+- [Auto Merge](#auto-merge)
+- [Support Us](#support-us)
+- [Contributing](#contributing)
+- [Security Vulnerabilities](#security-vulnerabilities)
+- [Credits](#credits)
+- [License](#license)
+
 ## Code Styling
 
 Workflow to run [Laravel Pint](https://github.com/laravel/pint) and automatically fix code style violations. Changes are
@@ -85,3 +94,32 @@ jobs:
     secrets:
       TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
 ```
+
+## Support Us
+
+Creating and maintaining open-source projects requires significant time and effort. Your support will help enhance the
+project and enable further contributions to the Laravel community.
+
+Sponsorship can be made through the [GitHub Sponsors](https://github.com/sponsors/mozex) program. Just click the "*
+*[Sponsor](https://github.com/sponsors/mozex)**" button at the top of this repository. Any amount is greatly
+appreciated, even a contribution as small as $1 can make a big difference and will go directly towards developing and
+improving this package.
+
+Thank you for considering sponsoring. Your support truly makes a difference!
+
+## Contributing
+
+Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
+
+## Security Vulnerabilities
+
+Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
+
+## Credits
+
+- [Mozex](https://github.com/mozex)
+- [All Contributors](../../contributors)
+
+## License
+
+The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
