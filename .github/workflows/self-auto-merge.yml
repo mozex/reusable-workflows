@@ -1,0 +1,10 @@
+name: Auto Merge
+
+on: pull_request_target
+
+jobs:
+  auto-merge:
+    name: Auto Merge
+    uses: mozex/reusable-workflows/.github/workflows/auto-merge.yml@main
+    secrets:
+      TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
