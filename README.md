@@ -60,3 +60,28 @@ jobs:
       php_version: '8.3'
       larastan_config_file: 'phpstan.php'
 ```
+
+## Auto Merge
+
+Workflow that can automatically merge Dependabot pull requests after the CI builds has run successfully.
+
+### Path
+
+```
+.github/workflows/auto-merge.yml
+```
+
+### Code
+
+```yml
+name: Auto Merge
+
+on: pull_request_target
+
+jobs:
+  auto-merge:
+    name: Auto Merge
+    uses: mozex/reusable-workflows/.github/workflows/auto-merge.yml@main
+    secrets:
+      TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
+```
