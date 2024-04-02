@@ -9,7 +9,7 @@ on:
     inputs:
       php_version:
         description: 'PHP version to be used.'
-        required: true
+        required: false
         type: string
         default: '8.3'
       larastan_config_file:
