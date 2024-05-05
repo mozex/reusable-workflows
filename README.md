@@ -36,6 +36,8 @@ jobs:
   coce-styling:
     name: Code Styling
     uses: mozex/reusable-workflows/.github/workflows/code-styling.yml@main
+    with:
+      test_mode: true
 ```
 
 ## Code Analysis

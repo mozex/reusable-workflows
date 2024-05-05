@@ -2,6 +2,12 @@ name: Code Styling
 
 on:
   workflow_call:
+    inputs:
+      test_mode:
+        description: 'Test mode.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -20,6 +26,8 @@ jobs:
 
       - name: Fix Code Style Issues
         uses: aglipanci/laravel-pint-action@2.4
+        with:
+          testMode: ${{ inputs.test_mode }}
 
       - name: Commit Changes
         uses: stefanzweifel/git-auto-commit-action@v5
