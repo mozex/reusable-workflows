@@ -48,6 +48,44 @@ jobs:
       phpunit_config_file: 'phpunit.xml'
 ```
 
+## Type Coverage
+
+Workflow to run Type Converage using [Pest](https://pestphp.com/docs/type-coverage).
+
+### Path
+
+```
+.github/workflows/type-coverage.yml
+```
+
+### Code
+
+```yml
+name: Type Coverage
+
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'composer.lock'
+      - 'phpunit.xml'
+      - 'phpunit.ci.xml'
+      - '.github/workflows/type-coverage.yml'
+  workflow_dispatch:
+
+jobs:
+  type-coverage:
+    name: Type Coverage
+    uses: mozex/reusable-workflows/.github/workflows/type-coverage.yml@main
+    secrets:
+      TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
+    with:
+      php_version: '8.3'
+      phpunit_config_file: 'phpunit.xml'
+      min: 100
+```
+
 ## Code Styling
 
 Workflow to run [Laravel Pint](https://github.com/laravel/pint) and automatically fix code style violations. Changes are
