@@ -1,6 +1,7 @@
 # Reusable Workflows
 A collection of reusable GitHub Actions workflows I use in my public and private projects.
 
+- [Tests](#tests)
 - [Code Styling](#code-styling)
 - [Code Analysis](#code-analysis)
 - [Auto Merge](#auto-merge)
@@ -9,6 +10,43 @@ A collection of reusable GitHub Actions workflows I use in my public and private
 - [Security Vulnerabilities](#security-vulnerabilities)
 - [Credits](#credits)
 - [License](#license)
+
+## Tests
+
+Workflow to run Laravel tests using [Pest](https://pestphp.com).
+
+### Path
+
+```
+.github/workflows/tests.yml
+```
+
+### Code
+
+```yml
+name: Tests
+
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'composer.lock'
+      - 'phpunit.xml'
+      - 'phpunit.ci.xml'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests
+    uses: mozex/reusable-workflows/.github/workflows/tests.yml@main
+    secrets:
+      TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
+    with:
+      php_version: '8.3'
+      phpunit_config_file: 'phpunit.xml'
+```
 
 ## Code Styling
 
