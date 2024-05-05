@@ -2,6 +2,7 @@
 A collection of reusable GitHub Actions workflows I use in my public and private projects.
 
 - [Tests](#tests)
+- [Type Coverage](#type-coverage)
 - [Code Styling](#code-styling)
 - [Code Analysis](#code-analysis)
 - [Auto Merge](#auto-merge)
