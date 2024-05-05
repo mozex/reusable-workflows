@@ -54,4 +54,4 @@ jobs:
         run: cp -f ${{ inputs.phpunit_config_file }} phpunit.xml
 
       - name: Check Coverage
-        run: ./vendor/bin/pest --type-coverage --min ${{ inputs.min }}
+        run: ./vendor/bin/pest --type-coverage --min=${{ inputs.min }}
