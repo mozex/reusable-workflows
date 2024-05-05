@@ -33,7 +33,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  coce-styling:
+  code-styling:
     name: Code Styling
     uses: mozex/reusable-workflows/.github/workflows/code-styling.yml@main
     with:
