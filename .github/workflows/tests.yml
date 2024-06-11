@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: 'phpunit.xml'
+      custom_commands:
+        description: 'Custom commands to run.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -37,6 +42,10 @@ jobs:
           php-version: ${{ inputs.php_version }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
           coverage: none
+
+      - name: Custom Commands
+        if: "inputs.custom_commands != ''"
+        run: ${{ inputs.custom_commands }}
 
       - name: Prepare The Environment
         run: cp .env.example .env
