@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: ''
+      databases:
+        description: 'Comma-separated list of database names to create'
+        required: false
+        type: string
+        default: 'testing'
 
 permissions:
   contents: write
@@ -53,7 +58,11 @@ jobs:
       - name: Create Database
         run: |
           sudo systemctl start mysql
-          mysql --user="root" --password="root" -e "CREATE DATABASE \`testing\` character set UTF8mb4 collate utf8mb4_bin;"
+          IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
+          for DB_NAME in "${DB_NAMES[@]}"; do
+            mysql --user="root" --password="root" -e "CREATE DATABASE \`$DB_NAME\` character set UTF8mb4 collate utf8mb4_bin;"
+            echo "Created database: $DB_NAME"
+          done
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v3
