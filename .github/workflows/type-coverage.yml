@@ -22,6 +22,11 @@ on:
         required: false
         type: number
         default: 100
+      custom_commands:
+        description: 'Custom commands to run.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -41,6 +46,10 @@ jobs:
         with:
           php-version: ${{ inputs.php_version }}
           coverage: none
+
+      - name: Custom Commands
+        if: "inputs.custom_commands != ''"
+        run: ${{ inputs.custom_commands }}
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v3
