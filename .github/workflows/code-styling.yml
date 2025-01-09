@@ -3,6 +3,15 @@ name: Code Styling
 on:
   workflow_call:
     inputs:
+      php_version:
+        description: 'PHP version to be used.'
+        required: false
+        type: string
+        default: '8.3'
+      message:
+        description: 'Commit message.'
+        type: string
+        default: Styling
       test_mode:
         description: 'Test mode.'
         required: false
@@ -24,12 +33,18 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - name: Fix Code Style Issues
-        uses: aglipanci/laravel-pint-action@2.4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
-          testMode: ${{ inputs.test_mode }}
+          php-version: ${{ inputs.php_version }}
+          tools: composer:v2, laravel/pint
+          extensions: json, dom, curl, libxml, mbstring
+          coverage: none
+
+      - name: Run Pint
+        run: pint ${{ inputs.test_mode && '--test' || '' }}
 
       - name: Commit Changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: Styling
+          commit_message: ${{ inputs.message }}
