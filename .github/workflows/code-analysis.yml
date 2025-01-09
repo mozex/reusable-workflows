@@ -40,6 +40,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
+          tools: composer:v2
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo
           coverage: none
 
       - name: Custom Commands
@@ -48,6 +50,8 @@ jobs:
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v3
+        with:
+          composer-options: "--prefer-dist --optimize-autoloader"
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
 
