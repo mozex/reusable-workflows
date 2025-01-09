@@ -114,6 +114,8 @@ jobs:
     name: Code Styling
     uses: mozex/reusable-workflows/.github/workflows/code-styling.yml@main
     with:
+      php_version: '8.3'
+      message: 'Styling'
       test_mode: true
 ```
 
