@@ -103,4 +103,4 @@ jobs:
 
       - name: Run Tests Sharded
         if: inputs.enable_sharding == true
-        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --processes=2 --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
+        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
