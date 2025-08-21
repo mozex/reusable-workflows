@@ -95,7 +95,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install Node Dependencies
-        run: yarn
+        run: yarn install --frozen-lockfile
 
       - name: Setup Vite Manifest
         run: yarn build
