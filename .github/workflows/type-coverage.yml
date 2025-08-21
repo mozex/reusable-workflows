@@ -8,7 +8,7 @@ on:
         description: 'GitHub Token used to install Composer dependencies.'
     inputs:
       php_version:
-        description: 'PHP version to be used.'
+        description: 'PHP version to use.'
         required: false
         type: string
         default: '8.3'
@@ -27,6 +27,16 @@ on:
         required: false
         type: string
         default: ''
+      enable_sharding:
+        description: 'Enable type coverage sharding for parallel execution'
+        required: false
+        type: boolean
+        default: false
+      shard_count:
+        description: 'Number of shards to split type coverage into (only used when sharding is enabled)'
+        required: false
+        type: number
+        default: 4
 
 permissions:
   contents: write
@@ -34,9 +44,13 @@ permissions:
 jobs:
   pest:
     if: "!contains(github.event.head_commit.message, 'wip')"
-    name: Pest
+    name: ${{ inputs.enable_sharding && format('Pest (Shard {0}/{1})', matrix.shard, inputs.shard_count) || 'Pest' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1,2,3,4]') || fromJson('[1]') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -63,4 +77,9 @@ jobs:
         run: cp -f ${{ inputs.phpunit_config_file }} phpunit.xml
 
       - name: Check Coverage
+        if: inputs.enable_sharding == false
         run: ./vendor/bin/pest --type-coverage --min=${{ inputs.min }} --compact
+
+      - name: Check Coverage Sharded
+        if: inputs.enable_sharding == true
+        run: ./vendor/bin/pest --type-coverage --min=${{ inputs.min }} --compact --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
