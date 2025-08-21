@@ -91,11 +91,14 @@ jobs:
 
       - name: Setup Node
         uses: actions/setup-node@v4
+        with:
+          cache: 'yarn'
+
+      - name: Install Node Dependencies
+        run: yarn
 
       - name: Setup Vite Manifest
-        run: |
-          yarn
-          yarn build
+        run: yarn build
 
       - name: Run Tests
         if: inputs.enable_sharding == false
