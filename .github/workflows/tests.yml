@@ -8,7 +8,7 @@ on:
         description: 'GitHub Token used to install Composer dependencies.'
     inputs:
       php_version:
-        description: 'PHP version to be used.'
+        description: 'PHP version to use.'
         required: false
         type: string
         default: '8.3'
@@ -27,6 +27,16 @@ on:
         required: false
         type: string
         default: 'testing'
+      enable_sharding:
+        description: 'Enable test sharding for parallel execution'
+        required: false
+        type: boolean
+        default: false
+      shard_count:
+        description: 'Number of shards to split tests into (only used when sharding is enabled)'
+        required: false
+        type: number
+        default: 4
 
 permissions:
   contents: write
@@ -34,9 +44,13 @@ permissions:
 jobs:
   pest:
     if: "!contains(github.event.head_commit.message, 'wip')"
-    name: Pest
+    name: ${{ inputs.enable_sharding && format('Pest (Shard {0}/{1})', matrix.shard, inputs.shard_count) || 'Pest' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ inputs.enable_sharding && fromJson(format('[{0}]', join(range(1, inputs.shard_count), ','))) || fromJson('[1]') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -83,4 +97,9 @@ jobs:
           yarn build
 
       - name: Run Tests
+        if: inputs.enable_sharding == false
         run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --processes=2 --colors=always
+
+      - name: Run Tests Sharded
+        if: inputs.enable_sharding == true
+        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --processes=2 --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
