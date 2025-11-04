@@ -47,11 +47,51 @@ jobs:
     with:
       php_version: '8.3'
       phpunit_config_file: 'phpunit.xml'
+      node_package_manager: 'yarn'
+```
+
+### Inputs
+- php_version (string, default: '8.3') – PHP version to use
+- phpunit_config_file (string, default: 'phpunit.xml') – PHPUnit config file path
+- custom_commands (string, default: '') – Optional shell commands to run before installing deps (e.g., set up services)
+- databases (string, default: 'testing') – Comma-separated DB names to create in MySQL (e.g., "testing,secondary")
+- enable_sharding (boolean, default: false) – Run tests across a matrix of shards for speed
+- shard_count (number, default: 4) – Number of shards to split the suite into (used only when sharding is enabled)
+- node_package_manager (string, default: 'yarn') – 'yarn' or 'npm' for JS install/build steps
+- secrets.TOKEN – Optional GitHub token for Composer installs (private packages)
+
+### Examples
+
+Enable sharding (8 shards)
+```yml
+with:
+  enable_sharding: true
+  shard_count: 8
+```
+
+Multiple databases
+```yml
+with:
+  databases: 'testing,secondary'
+```
+
+Use npm instead of Yarn
+```yml
+with:
+  node_package_manager: 'npm'
+```
+
+Run custom commands before dependencies
+```yml
+with:
+  custom_commands: |
+    php -v
+    node -v
 ```
 
 ## Type Coverage
 
-Workflow to run Type Converage using [Pest](https://pestphp.com/docs/type-coverage).
+Workflow to run Type Coverage using [Pest](https://pestphp.com/docs/type-coverage).
 
 ### Path
 
@@ -87,6 +127,30 @@ jobs:
       min: 100
 ```
 
+### Inputs
+- php_version (string, default: '8.3')
+- phpunit_config_file (string, default: 'phpunit.xml') – PHPUnit config to use
+- min (number, default: 100) – Minimum type coverage threshold
+- custom_commands (string, default: '') – Optional pre-steps
+- enable_sharding (boolean, default: false) – Enable sharded runs
+- shard_count (number, default: 4) – Shard count when sharding is enabled
+- secrets.TOKEN – Optional GitHub token for Composer installs
+
+### Examples
+
+Enable sharding (4 shards)
+```yml
+with:
+  enable_sharding: true
+  shard_count: 4
+```
+
+Lower threshold to 90
+```yml
+with:
+  min: 90
+```
+
 ## Code Styling
 
 Workflow to run [Laravel Pint](https://github.com/laravel/pint) and automatically fix code style violations. Changes are
@@ -118,6 +182,11 @@ jobs:
       message: 'Styling'
       test_mode: true
 ```
+
+### Inputs
+- php_version (string, default: '8.3')
+- message (string, default: 'Styling') – Commit message for auto-commit
+- test_mode (boolean, default: false) – If true, runs pint in test mode without committing changes
 
 ## Code Analysis
 
@@ -151,6 +220,20 @@ jobs:
       larastan_config_file: 'phpstan.php'
 ```
 
+### Inputs
+- php_version (string, default: '8.3')
+- larastan_config_file (string, default: 'phpstan.neon.dist') – Larastan/PHPStan config file
+- custom_commands (string, default: '') – Optional shell commands before install/analysis
+- secrets.TOKEN – Optional GitHub token for Composer installs
+
+### Example
+Use a custom config and a pre-step
+```yml
+with:
+  larastan_config_file: 'phpstan.php'
+  custom_commands: 'echo Preparing analysis'
+```
+
 ## Auto Merge
 
 Workflow that can automatically merge Dependabot pull requests after the CI builds has run successfully.
@@ -175,6 +258,10 @@ jobs:
     secrets:
       TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
 ```
+
+### Notes
+- Requires a token with repo permissions in secrets.KEYMASTER_TOKEN
+- Automatically merges Dependabot PRs that are minor or patch updates after checks pass
 
 ## Support Us
 

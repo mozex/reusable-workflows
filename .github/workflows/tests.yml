@@ -37,6 +37,11 @@ on:
         required: false
         type: number
         default: 4
+      node_package_manager:
+        description: 'Node package manager to use (yarn or npm).'
+        required: false
+        type: string
+        default: 'yarn'
 
 permissions:
   contents: write
@@ -88,16 +93,33 @@ jobs:
       - name: Generate Application Key
         run: php artisan key:generate
 
+      - name: Validate Node Package Manager
+        run: |
+          if [ "${{ inputs.node_package_manager }}" != "yarn" ] && [ "${{ inputs.node_package_manager }}" != "npm" ]; then
+            echo "Invalid node_package_manager: ${{ inputs.node_package_manager }}. Use 'yarn' or 'npm'."
+            exit 1
+          fi
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          cache: 'yarn'
+          cache: ${{ inputs.node_package_manager }}
 
-      - name: Install Node Dependencies
+      - name: Install Node Dependencies (yarn)
+        if: inputs.node_package_manager == 'yarn'
         run: yarn install --frozen-lockfile
 
-      - name: Setup Vite Manifest
+      - name: Install Node Dependencies (npm)
+        if: inputs.node_package_manager == 'npm'
+        run: npm ci
+
+      - name: Setup Vite Manifest (yarn)
+        if: inputs.node_package_manager == 'yarn'
         run: yarn build
+
+      - name: Setup Vite Manifest (npm)
+        if: inputs.node_package_manager == 'npm'
+        run: npm run build
 
       - name: Run Tests
         if: inputs.enable_sharding == false
