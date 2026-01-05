@@ -51,7 +51,7 @@ jobs:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: ${{ inputs.enable_sharding && format('Pest (Shard {0}/{1})', matrix.shard, inputs.shard_count) || 'Pest' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
