@@ -42,6 +42,16 @@ on:
         required: false
         type: string
         default: 'yarn'
+      python_tests:
+        description: 'Enable Python tests'
+        required: false
+        type: boolean
+        default: false
+      python_version:
+        description: 'Python version to use for tests'
+        required: false
+        type: string
+        default: '3.12'
 
 permissions:
   contents: write
@@ -58,7 +68,7 @@ jobs:
         shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1,2,3,4]') || fromJson('[1]') }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -101,7 +111,7 @@ jobs:
           fi
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           cache: ${{ inputs.node_package_manager }}
 
@@ -128,3 +138,57 @@ jobs:
       - name: Run Tests Sharded
         if: inputs.enable_sharding == true
         run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
+
+  python-tests:
+    if: ${{ inputs.python_tests && !contains(github.event.head_commit.message, 'wip') }}
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
+          coverage: none
+
+      - name: Custom Commands
+        if: "inputs.custom_commands != ''"
+        run: ${{ inputs.custom_commands }}
+
+      - name: Prepare The Environment
+        run: cp .env.example .env
+
+      - name: Create Database
+        run: |
+          sudo systemctl start mysql
+          IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
+          for DB_NAME in "${DB_NAMES[@]}"; do
+            mysql --user="root" --password="root" -e "CREATE DATABASE \`$DB_NAME\` character set UTF8mb4 collate utf8mb4_bin;"
+            echo "Created database: $DB_NAME"
+          done
+
+
+      - name: Install Composer Dependencies
+        uses: ramsey/composer-install@v3
+        with:
+          composer-options: "--prefer-dist --optimize-autoloader"
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
+
+      - name: Generate Application Key
+        run: php artisan key:generate
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install Python Dependencies
+        run: composer python:install
+
+      - name: Run Python Tests
+        run: php artisan python:test --configuration ${{ inputs.phpunit_config_file }}
