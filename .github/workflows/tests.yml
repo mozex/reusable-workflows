@@ -61,7 +61,7 @@ jobs:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: ${{ inputs.enable_sharding && format('Pest (Shard {0}/{1})', matrix.shard, inputs.shard_count) || 'Pest' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -170,7 +170,6 @@ jobs:
             mysql --user="root" --password="root" -e "CREATE DATABASE \`$DB_NAME\` character set UTF8mb4 collate utf8mb4_bin;"
             echo "Created database: $DB_NAME"
           done
-
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v3
