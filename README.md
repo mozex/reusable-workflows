@@ -58,6 +58,9 @@ jobs:
 - enable_sharding (boolean, default: false) – Run tests across a matrix of shards for speed
 - shard_count (number, default: 4) – Number of shards to split the suite into (used only when sharding is enabled)
 - node_package_manager (string, default: 'yarn') – 'yarn' or 'npm' for JS install/build steps
+- install_playwright (boolean, default: false) – Install Playwright browsers (via `npx playwright install --with-deps`) after Node dependencies
+- python_tests (boolean, default: false) – Enable a separate Python test job (runs `php artisan python:test`)
+- python_version (string, default: '3.12') – Python version to use when `python_tests` is enabled
 - secrets.TOKEN – Optional GitHub token for Composer installs (private packages)
 
 ### Examples
@@ -79,6 +82,19 @@ Use npm instead of Yarn
 ```yml
 with:
   node_package_manager: 'npm'
+```
+
+Install Playwright browsers for browser testing
+```yml
+with:
+  install_playwright: true
+```
+
+Enable Python tests
+```yml
+with:
+  python_tests: true
+  python_version: '3.12'
 ```
 
 Run custom commands before dependencies
