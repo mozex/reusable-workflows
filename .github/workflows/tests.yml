@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: 'yarn'
+      install_playwright:
+        description: 'Install Playwright browsers after Node dependencies'
+        required: false
+        type: boolean
+        default: false
       python_tests:
         description: 'Enable Python tests'
         required: false
@@ -131,9 +136,13 @@ jobs:
         if: inputs.node_package_manager == 'npm'
         run: npm run build
 
+      - name: Install Playwright Browsers
+        if: inputs.install_playwright
+        run: npx playwright install --with-deps
+
       - name: Run Tests
         if: inputs.enable_sharding == false
-        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --processes=2 --colors=always
+        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always
 
       - name: Run Tests Sharded
         if: inputs.enable_sharding == true
