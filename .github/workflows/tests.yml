@@ -47,6 +47,11 @@ on:
         required: false
         type: string
         default: ''
+      install_ffmpeg:
+        description: 'Install FFmpeg and FFprobe'
+        required: false
+        type: boolean
+        default: false
       install_playwright:
         description: 'Install Playwright browsers after Node dependencies'
         required: false
@@ -92,8 +97,14 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: ${{ inputs.apt_packages }}
-          execute_install_scripts: "true"
           version: 1.0
+
+      - name: Setup FFmpeg
+        if: inputs.install_ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+          github-token: ${{ github.token }}
 
       - name: Custom Commands
         if: "inputs.custom_commands != ''"
