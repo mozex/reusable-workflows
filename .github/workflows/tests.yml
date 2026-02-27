@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: 'yarn'
+      apt_packages:
+        description: 'Space-separated list of apt packages to install and cache'
+        required: false
+        type: string
+        default: ''
       install_playwright:
         description: 'Install Playwright browsers after Node dependencies'
         required: false
@@ -81,6 +86,13 @@ jobs:
           php-version: ${{ inputs.php_version }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
           coverage: none
+
+      - name: Install APT Packages
+        if: inputs.apt_packages != ''
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: ${{ inputs.apt_packages }}
+          version: 1.0
 
       - name: Custom Commands
         if: "inputs.custom_commands != ''"
@@ -136,9 +148,26 @@ jobs:
         if: inputs.node_package_manager == 'npm'
         run: npm run build
 
-      - name: Install Playwright Browsers
+      - name: Get Playwright version
         if: inputs.install_playwright
-        run: npx playwright install --with-deps
+        id: playwright-version
+        run: echo "version=$(npx playwright --version)" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        if: inputs.install_playwright
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Browsers
+        if: inputs.install_playwright && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium --with-deps
+
+      - name: Install Playwright OS Dependencies
+        if: inputs.install_playwright && steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Run Tests
         if: inputs.enable_sharding == false
