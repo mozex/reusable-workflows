@@ -92,6 +92,7 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: ${{ inputs.apt_packages }}
+          execute_install_scripts: "true"
           version: 1.0
 
       - name: Custom Commands
