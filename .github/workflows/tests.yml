@@ -101,10 +101,7 @@ jobs:
 
       - name: Setup FFmpeg
         if: inputs.install_ffmpeg
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        with:
-          ffmpeg-version: release
-          github-token: ${{ github.token }}
+        uses: AnimMouse/setup-ffmpeg@v1
 
       - name: Custom Commands
         if: "inputs.custom_commands != ''"
