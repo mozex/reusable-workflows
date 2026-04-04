@@ -37,6 +37,11 @@ on:
         required: false
         type: number
         default: 4
+      node_version:
+        description: 'Node.js version to use.'
+        required: false
+        type: string
+        default: '24'
       node_package_manager:
         description: 'Node package manager to use (yarn or npm).'
         required: false
@@ -139,6 +144,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
+          node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.node_package_manager }}
 
       - name: Install Node Dependencies (yarn)
