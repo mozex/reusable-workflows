@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: ''
+      before_test_commands:
+        description: 'Custom commands to run immediately before the tests.'
+        required: false
+        type: string
+        default: ''
       databases:
         description: 'Comma-separated list of database names to create'
         required: false
@@ -184,6 +189,10 @@ jobs:
         if: inputs.install_playwright && steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
+      - name: Before Test Commands
+        if: "inputs.before_test_commands != ''"
+        run: ${{ inputs.before_test_commands }}
+
       - name: Run Tests
         if: inputs.enable_sharding == false
         run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always
@@ -241,6 +250,10 @@ jobs:
 
       - name: Install Python Dependencies
         run: composer python:install
+
+      - name: Before Test Commands
+        if: "inputs.before_test_commands != ''"
+        run: ${{ inputs.before_test_commands }}
 
       - name: Run Python Tests
         run: php artisan python:test --configuration ${{ inputs.phpunit_config_file }}

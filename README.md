@@ -54,6 +54,7 @@ jobs:
 - php_version (string, default: '8.3') – PHP version to use
 - phpunit_config_file (string, default: 'phpunit.xml') – PHPUnit config file path
 - custom_commands (string, default: '') – Optional shell commands to run before installing deps (e.g., set up services)
+- before_test_commands (string, default: '') – Optional shell commands to run immediately before the tests (after Composer, Node, and Playwright setup)
 - databases (string, default: 'testing') – Comma-separated DB names to create in MySQL (e.g., "testing,secondary")
 - enable_sharding (boolean, default: false) – Run tests across a matrix of shards for speed
 - shard_count (number, default: 4) – Number of shards to split the suite into (used only when sharding is enabled)
@@ -103,6 +104,14 @@ with:
   custom_commands: |
     php -v
     node -v
+```
+
+Run custom commands immediately before the tests
+```yml
+with:
+  before_test_commands: |
+    php artisan migrate --force
+    php artisan db:seed --class=TestSeeder --force
 ```
 
 ## Type Coverage
