@@ -22,16 +22,25 @@ on:
         required: false
         type: string
         default: ''
+      timeout_minutes:
+        description: 'Timeout in minutes for the job.'
+        required: false
+        type: number
+        default: 5
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   larastan:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: Larastan
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -49,9 +58,9 @@ jobs:
         run: ${{ inputs.custom_commands }}
 
       - name: Install Composer Dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
         with:
-          composer-options: "--prefer-dist --optimize-autoloader"
+          composer-options: "--prefer-dist"
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
 

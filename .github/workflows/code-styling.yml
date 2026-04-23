@@ -17,16 +17,25 @@ on:
         required: false
         type: boolean
         default: false
+      timeout_minutes:
+        description: 'Timeout in minutes for the job.'
+        required: false
+        type: number
+        default: 5
 
 permissions:
   contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pint:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: Pint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6

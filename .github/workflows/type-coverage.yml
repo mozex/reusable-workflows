@@ -18,7 +18,7 @@ on:
         type: string
         default: 'phpunit.xml'
       min:
-        description: 'Minimum Threshold Enforcement'
+        description: 'Minimum threshold enforcement.'
         required: false
         type: number
         default: 100
@@ -28,29 +28,61 @@ on:
         type: string
         default: ''
       enable_sharding:
-        description: 'Enable type coverage sharding for parallel execution'
+        description: 'Enable type coverage sharding for parallel execution.'
         required: false
         type: boolean
         default: false
       shard_count:
-        description: 'Number of shards to split type coverage into (only used when sharding is enabled)'
+        description: 'Number of shards to split type coverage into (only used when sharding is enabled).'
         required: false
         type: number
         default: 4
+      timeout_minutes:
+        description: 'Timeout in minutes for the job.'
+        required: false
+        type: number
+        default: 10
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  setup:
+    if: "!contains(github.event.head_commit.message, 'wip')"
+    name: Setup Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      shards: ${{ steps.generate.outputs.shards }}
+    steps:
+      - name: Generate Shard Matrix
+        id: generate
+        shell: bash
+        env:
+          ENABLED: ${{ inputs.enable_sharding }}
+          COUNT: ${{ inputs.shard_count }}
+        run: |
+          if [ "$ENABLED" = "true" ]; then
+            shards=$(seq 1 "$COUNT" | jq -cs .)
+          else
+            shards='[1]'
+          fi
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+
   pest:
+    needs: setup
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: ${{ inputs.enable_sharding && format('Pest (Shard {0}{1}/{2})', inputs.shard_count >= 10 && matrix.shard < 10 && '0' || '', matrix.shard, inputs.shard_count) || 'Pest' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1,2,3,4]') || fromJson('[1]') }}
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -66,9 +98,9 @@ jobs:
         run: ${{ inputs.custom_commands }}
 
       - name: Install Composer Dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
         with:
-          composer-options: "--prefer-dist --optimize-autoloader"
+          composer-options: "--prefer-dist"
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
 

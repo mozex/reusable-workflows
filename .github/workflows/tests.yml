@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: '8.3'
+      php_extensions:
+        description: 'Comma-separated PHP extensions to install.'
+        required: false
+        type: string
+        default: 'dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo'
       phpunit_config_file:
         description: 'PHPUnit configuration file.'
         required: false
@@ -27,18 +32,23 @@ on:
         required: false
         type: string
         default: ''
+      database_driver:
+        description: 'Database driver: mysql, sqlite, or none.'
+        required: false
+        type: string
+        default: 'mysql'
       databases:
-        description: 'Comma-separated list of database names to create'
+        description: 'Comma-separated list of database names to create (MySQL only).'
         required: false
         type: string
         default: 'testing'
       enable_sharding:
-        description: 'Enable test sharding for parallel execution'
+        description: 'Enable test sharding for parallel execution.'
         required: false
         type: boolean
         default: false
       shard_count:
-        description: 'Number of shards to split tests into (only used when sharding is enabled)'
+        description: 'Number of shards to split tests into (only used when sharding is enabled).'
         required: false
         type: number
         default: 4
@@ -53,44 +63,76 @@ on:
         type: string
         default: 'yarn'
       apt_packages:
-        description: 'Space-separated list of apt packages to install and cache'
+        description: 'Space-separated list of apt packages to install and cache.'
         required: false
         type: string
         default: ''
       install_ffmpeg:
-        description: 'Install FFmpeg and FFprobe'
+        description: 'Install FFmpeg and FFprobe.'
         required: false
         type: boolean
         default: false
       install_playwright:
-        description: 'Install Playwright browsers after Node dependencies'
+        description: 'Install Playwright browsers after Node dependencies.'
         required: false
         type: boolean
         default: false
       python_tests:
-        description: 'Enable Python tests'
+        description: 'Enable Python tests.'
         required: false
         type: boolean
         default: false
       python_version:
-        description: 'Python version to use for tests'
+        description: 'Python version to use for tests.'
         required: false
         type: string
         default: '3.12'
+      timeout_minutes:
+        description: 'Timeout in minutes for the test job.'
+        required: false
+        type: number
+        default: 30
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  setup:
+    if: "!contains(github.event.head_commit.message, 'wip')"
+    name: Setup Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      shards: ${{ steps.generate.outputs.shards }}
+    steps:
+      - name: Generate Shard Matrix
+        id: generate
+        shell: bash
+        env:
+          ENABLED: ${{ inputs.enable_sharding }}
+          COUNT: ${{ inputs.shard_count }}
+        run: |
+          if [ "$ENABLED" = "true" ]; then
+            shards=$(seq 1 "$COUNT" | jq -cs .)
+          else
+            shards='[1]'
+          fi
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+
   pest:
+    needs: setup
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: ${{ inputs.enable_sharding && format('Pest (Shard {0}{1}/{2})', inputs.shard_count >= 10 && matrix.shard < 10 && '0' || '', matrix.shard, inputs.shard_count) || 'Pest' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1,2,3,4]') || fromJson('[1]') }}
+        shard: ${{ fromJson(needs.setup.outputs.shards) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -99,7 +141,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
+          extensions: ${{ inputs.php_extensions }}
           coverage: none
 
       - name: Install APT Packages
@@ -121,6 +163,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Create Database
+        if: inputs.database_driver == 'mysql'
         run: |
           sudo systemctl start mysql
           IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
@@ -130,9 +173,9 @@ jobs:
           done
 
       - name: Install Composer Dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
         with:
-          composer-options: "--prefer-dist --optimize-autoloader"
+          composer-options: "--prefer-dist"
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
 
@@ -140,6 +183,7 @@ jobs:
         run: php artisan key:generate
 
       - name: Validate Node Package Manager
+        if: hashFiles('package.json') != ''
         run: |
           if [ "${{ inputs.node_package_manager }}" != "yarn" ] && [ "${{ inputs.node_package_manager }}" != "npm" ]; then
             echo "Invalid node_package_manager: ${{ inputs.node_package_manager }}. Use 'yarn' or 'npm'."
@@ -147,25 +191,26 @@ jobs:
           fi
 
       - name: Setup Node
+        if: hashFiles('package.json') != ''
         uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.node_package_manager }}
 
       - name: Install Node Dependencies (yarn)
-        if: inputs.node_package_manager == 'yarn'
+        if: inputs.node_package_manager == 'yarn' && hashFiles('package.json') != ''
         run: yarn install --frozen-lockfile
 
       - name: Install Node Dependencies (npm)
-        if: inputs.node_package_manager == 'npm'
+        if: inputs.node_package_manager == 'npm' && hashFiles('package.json') != ''
         run: npm ci
 
       - name: Setup Vite Manifest (yarn)
-        if: inputs.node_package_manager == 'yarn'
+        if: inputs.node_package_manager == 'yarn' && hashFiles('vite.config.*') != ''
         run: yarn build
 
       - name: Setup Vite Manifest (npm)
-        if: inputs.node_package_manager == 'npm'
+        if: inputs.node_package_manager == 'npm' && hashFiles('vite.config.*') != ''
         run: npm run build
 
       - name: Get Playwright version
@@ -176,7 +221,7 @@ jobs:
       - name: Cache Playwright browsers
         if: inputs.install_playwright
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -214,7 +259,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
+          extensions: ${{ inputs.php_extensions }}
           coverage: none
 
       - name: Custom Commands
@@ -225,6 +270,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Create Database
+        if: inputs.database_driver == 'mysql'
         run: |
           sudo systemctl start mysql
           IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
@@ -234,9 +280,9 @@ jobs:
           done
 
       - name: Install Composer Dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
         with:
-          composer-options: "--prefer-dist --optimize-autoloader"
+          composer-options: "--prefer-dist"
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
 
