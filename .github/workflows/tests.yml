@@ -52,6 +52,16 @@ on:
         required: false
         type: number
         default: 4
+      install_node_dependencies:
+        description: 'Run yarn install or npm ci. Set to false for rare edge cases that do not need Node.'
+        required: false
+        type: boolean
+        default: true
+      build_node_assets:
+        description: 'Run yarn build or npm run build. Set to false when the app has no frontend build step.'
+        required: false
+        type: boolean
+        default: true
       node_version:
         description: 'Node.js version to use.'
         required: false
@@ -98,7 +108,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   setup:
@@ -183,7 +193,7 @@ jobs:
         run: php artisan key:generate
 
       - name: Validate Node Package Manager
-        if: hashFiles('package.json') != ''
+        if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
         run: |
           if [ "${{ inputs.node_package_manager }}" != "yarn" ] && [ "${{ inputs.node_package_manager }}" != "npm" ]; then
             echo "Invalid node_package_manager: ${{ inputs.node_package_manager }}. Use 'yarn' or 'npm'."
@@ -191,26 +201,26 @@ jobs:
           fi
 
       - name: Setup Node
-        if: hashFiles('package.json') != ''
+        if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
         uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.node_package_manager }}
 
       - name: Install Node Dependencies (yarn)
-        if: inputs.node_package_manager == 'yarn' && hashFiles('package.json') != ''
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'yarn'
         run: yarn install --frozen-lockfile
 
       - name: Install Node Dependencies (npm)
-        if: inputs.node_package_manager == 'npm' && hashFiles('package.json') != ''
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'npm'
         run: npm ci
 
-      - name: Setup Vite Manifest (yarn)
-        if: inputs.node_package_manager == 'yarn' && hashFiles('vite.config.*') != ''
+      - name: Build Node Assets (yarn)
+        if: inputs.build_node_assets && inputs.node_package_manager == 'yarn'
         run: yarn build
 
-      - name: Setup Vite Manifest (npm)
-        if: inputs.node_package_manager == 'npm' && hashFiles('vite.config.*') != ''
+      - name: Build Node Assets (npm)
+        if: inputs.build_node_assets && inputs.node_package_manager == 'npm'
         run: npm run build
 
       - name: Get Playwright version
