@@ -27,7 +27,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: code-styling-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
