@@ -1,20 +1,36 @@
 # Reusable Workflows
-A collection of reusable GitHub Actions workflows I use in my public and private projects.
 
+Reusable GitHub Actions workflows for Laravel application CI. Five workflows: Pest tests, Pest type coverage, Pint styling, Larastan static analysis, and Dependabot auto-merge. Callers are tiny one-file wrappers, so every application you maintain updates in one place.
+
+## Table of Contents
+
+- [Getting Started](#getting-started)
 - [Tests](#tests)
 - [Type Coverage](#type-coverage)
 - [Code Styling](#code-styling)
 - [Code Analysis](#code-analysis)
 - [Auto Merge](#auto-merge)
-- [Support Us](#support-us)
-- [Contributing](#contributing)
-- [Security Vulnerabilities](#security-vulnerabilities)
-- [Credits](#credits)
+- [Support This Project](#support-this-project)
+- [Contributing & Security](#contributing--security)
 - [License](#license)
+
+## Getting Started
+
+Each workflow lives in this repo. You call it from your own repo with a small wrapper file under `.github/workflows/`. The wrapper passes inputs and secrets; the reusable workflow runs the actual job.
+
+If your `composer.json` pulls private Git packages, create a `KEYMASTER_TOKEN` secret on the consuming repo with a PAT that has `repo` scope. You can rename the secret in your wrapper; the examples below use `KEYMASTER_TOKEN` to match my own setup.
+
+### Shared defaults
+
+The test, type coverage, code analysis, and code styling workflows all share a few opinionated defaults worth knowing about:
+
+- **WIP commits skip CI.** If the commit message contains `wip`, the job exits before doing any work. Good for checkpoint commits you don't want burning CI minutes.
+- **New commits cancel old runs.** A `concurrency` group keyed on workflow name and ref cancels any in-progress run when a new push arrives. This applies to pushes and pull requests equally, so rapid-fire commits only execute the final run. Branches are isolated from each other (different ref, different group).
+- **Least-privilege permissions.** Tests, type coverage, and code analysis request `contents: read`. Code styling and auto merge request `contents: write` because they push commits or merge PRs.
 
 ## Tests
 
-Workflow to run Laravel tests using [Pest](https://pestphp.com).
+Runs [Pest](https://pestphp.com) with Node install + Vite build baked in, plus optional parallel sharding, Playwright browsers, a separate Python test job, FFmpeg, extra apt packages, and MySQL with one or more databases.
 
 ### Path
 
@@ -22,7 +38,7 @@ Workflow to run Laravel tests using [Pest](https://pestphp.com).
 .github/workflows/tests.yml
 ```
 
-### Code
+### Example caller
 
 ```yml
 name: Tests
@@ -51,62 +67,94 @@ jobs:
 ```
 
 ### Inputs
-- php_version (string, default: '8.3') – PHP version to use
-- phpunit_config_file (string, default: 'phpunit.xml') – PHPUnit config file path
-- custom_commands (string, default: '') – Optional shell commands to run before installing deps (e.g., set up services)
-- before_test_commands (string, default: '') – Optional shell commands to run immediately before the tests (after Composer, Node, and Playwright setup)
-- databases (string, default: 'testing') – Comma-separated DB names to create in MySQL (e.g., "testing,secondary")
-- enable_sharding (boolean, default: false) – Run tests across a matrix of shards for speed
-- shard_count (number, default: 4) – Number of shards to split the suite into (used only when sharding is enabled)
-- node_package_manager (string, default: 'yarn') – 'yarn' or 'npm' for JS install/build steps
-- install_playwright (boolean, default: false) – Install Playwright browsers (via `npx playwright install --with-deps`) after Node dependencies
-- python_tests (boolean, default: false) – Enable a separate Python test job (runs `php artisan python:test`)
-- python_version (string, default: '3.12') – Python version to use when `python_tests` is enabled
-- secrets.TOKEN – Optional GitHub token for Composer installs (private packages)
 
-### Examples
+| Input | Type | Default | Purpose |
+|---|---|---|---|
+| `php_version` | string | `'8.3'` | PHP version for `shivammathur/setup-php`. |
+| `php_extensions` | string | See below | Comma-separated extensions. Trim the list to cut setup time (drop `imagick` and `soap` if you don't use them). |
+| `phpunit_config_file` | string | `'phpunit.xml'` | Path to the PHPUnit config. |
+| `custom_commands` | string | `''` | Shell commands that run before Composer install. |
+| `before_test_commands` | string | `''` | Shell commands that run right before Pest starts, after all other setup. Good spot for `php artisan migrate --force` or seeding. |
+| `database_driver` | string | `'mysql'` | `mysql` starts MySQL and creates databases. `sqlite` skips DB setup entirely (point your `.env` at sqlite). `none` also skips DB setup. |
+| `databases` | string | `'testing'` | Comma-separated MySQL database names. Only used when `database_driver: mysql`. |
+| `enable_sharding` | boolean | `false` | Run Pest across a matrix of parallel shards. |
+| `shard_count` | number | `4` | Number of shards when sharding is on. Any positive integer works. |
+| `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
+| `build_node_assets` | boolean | `true` | Run `yarn build` or `npm run build`. Set to `false` for apps without a frontend build step. |
+| `node_version` | string | `'24'` | Node.js version. |
+| `node_package_manager` | string | `'yarn'` | `yarn` or `npm`. |
+| `apt_packages` | string | `''` | Space-separated apt packages installed via `awalsh128/cache-apt-pkgs-action`. |
+| `install_ffmpeg` | boolean | `false` | Install FFmpeg and FFprobe. |
+| `install_playwright` | boolean | `false` | Install Playwright Chromium plus OS deps, with cache. |
+| `python_tests` | boolean | `false` | Run a separate pytest job via `php artisan python:test`. |
+| `python_version` | string | `'3.12'` | Python version for the pytest job. |
+| `timeout_minutes` | number | `30` | Job timeout in minutes. |
 
-Enable sharding (8 shards)
+Default `php_extensions`: `dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo`.
+
+Required secret: `TOKEN` if `composer.json` pulls private packages.
+
+### Behavior notes
+
+- **Node install and Vite build run by default.** The workflow is designed for Laravel applications, which all have a `package.json` and a frontend build. If you have an edge-case app that doesn't need one of them, set `install_node_dependencies: false` or `build_node_assets: false`.
+- **Playwright browsers** are cached by version at `~/.cache/ms-playwright`. Cache hit: only OS deps install (apt packages aren't cacheable). Cache miss: `playwright install chromium --with-deps`.
+- **Sharding** uses Pest's `--shard=X/Y` flag. A small `setup` job generates the shard list before the test jobs fan out, so you can pick any count: 2, 3, 8, 17, whatever.
+
+### More examples
+
+Parallel run across 8 shards:
+
 ```yml
 with:
   enable_sharding: true
   shard_count: 8
 ```
 
-Multiple databases
+Two MySQL databases (primary and secondary):
+
 ```yml
 with:
   databases: 'testing,secondary'
 ```
 
-Use npm instead of Yarn
+SQLite in memory instead of MySQL. Set `DB_CONNECTION=sqlite` and `DB_DATABASE=:memory:` in your `.env.example`:
+
 ```yml
 with:
-  node_package_manager: 'npm'
+  database_driver: 'sqlite'
 ```
 
-Install Playwright browsers for browser testing
+Leaner PHP extensions for faster setup:
+
+```yml
+with:
+  php_extensions: 'dom, curl, libxml, mbstring, zip, pcntl, bcmath, intl, fileinfo, pdo_sqlite'
+```
+
+Skip the frontend build (e.g. API-only Laravel app):
+
+```yml
+with:
+  build_node_assets: false
+```
+
+Skip Node entirely (rare; app without a `package.json`):
+
+```yml
+with:
+  install_node_dependencies: false
+  build_node_assets: false
+```
+
+Playwright browser tests:
+
 ```yml
 with:
   install_playwright: true
 ```
 
-Enable Python tests
-```yml
-with:
-  python_tests: true
-  python_version: '3.12'
-```
+Run migrations and seeders right before tests:
 
-Run custom commands before dependencies
-```yml
-with:
-  custom_commands: |
-    php -v
-    node -v
-```
-
-Run custom commands immediately before the tests
 ```yml
 with:
   before_test_commands: |
@@ -114,9 +162,17 @@ with:
     php artisan db:seed --class=TestSeeder --force
 ```
 
+Enable the Python test job alongside Pest:
+
+```yml
+with:
+  python_tests: true
+  python_version: '3.12'
+```
+
 ## Type Coverage
 
-Workflow to run Type Coverage using [Pest](https://pestphp.com/docs/type-coverage).
+Runs [Pest's type coverage](https://pestphp.com/docs/type-coverage) check with an adjustable minimum threshold.
 
 ### Path
 
@@ -124,7 +180,7 @@ Workflow to run Type Coverage using [Pest](https://pestphp.com/docs/type-coverag
 .github/workflows/type-coverage.yml
 ```
 
-### Code
+### Example caller
 
 ```yml
 name: Type Coverage
@@ -153,40 +209,46 @@ jobs:
 ```
 
 ### Inputs
-- php_version (string, default: '8.3')
-- phpunit_config_file (string, default: 'phpunit.xml') – PHPUnit config to use
-- min (number, default: 100) – Minimum type coverage threshold
-- custom_commands (string, default: '') – Optional pre-steps
-- enable_sharding (boolean, default: false) – Enable sharded runs
-- shard_count (number, default: 4) – Shard count when sharding is enabled
-- secrets.TOKEN – Optional GitHub token for Composer installs
 
-### Examples
+| Input | Type | Default | Purpose |
+|---|---|---|---|
+| `php_version` | string | `'8.3'` | PHP version. |
+| `phpunit_config_file` | string | `'phpunit.xml'` | PHPUnit config. If it's not `phpunit.xml`, it's copied to that name before the run. |
+| `min` | number | `100` | Minimum type coverage percentage. The job fails below this. |
+| `custom_commands` | string | `''` | Shell commands that run before Composer install. |
+| `enable_sharding` | boolean | `false` | Split the coverage run across parallel shards. |
+| `shard_count` | number | `4` | Shard count when sharding is on. |
+| `timeout_minutes` | number | `10` | Job timeout in minutes. |
 
-Enable sharding (4 shards)
+### More examples
+
+Lower the threshold to 90%:
+
+```yml
+with:
+  min: 90
+```
+
+Split across 4 shards:
+
 ```yml
 with:
   enable_sharding: true
   shard_count: 4
 ```
 
-Lower threshold to 90
-```yml
-with:
-  min: 90
-```
-
 ## Code Styling
 
-Workflow to run [Laravel Pint](https://github.com/laravel/pint) and automatically fix code style violations. Changes are
-pushed back to the GitHub repository.
+Runs [Laravel Pint](https://github.com/laravel/pint) and commits style fixes back to the branch. With `test_mode: true`, it only reports violations without committing, which is what you want on PRs from forks.
 
 ### Path
+
 ```
 .github/workflows/code-styling.yml
 ```
 
-### Code
+### Example caller
+
 ```yml
 name: Code Styling
 
@@ -205,24 +267,30 @@ jobs:
     with:
       php_version: '8.3'
       message: 'Styling'
-      test_mode: true
+      test_mode: false
 ```
 
 ### Inputs
-- php_version (string, default: '8.3')
-- message (string, default: 'Styling') – Commit message for auto-commit
-- test_mode (boolean, default: false) – If true, runs pint in test mode without committing changes
+
+| Input | Type | Default | Purpose |
+|---|---|---|---|
+| `php_version` | string | `'8.3'` | PHP version. |
+| `message` | string | `'Styling'` | Commit message used when pushing auto-fixed changes. |
+| `test_mode` | boolean | `false` | Runs `pint --test` without committing. Use for read-only checks on fork PRs. |
+| `timeout_minutes` | number | `5` | Job timeout in minutes. |
 
 ## Code Analysis
 
-Workflow to run [Larastan](https://github.com/larastan/larastan) in projects.
+Runs [Larastan](https://github.com/larastan/larastan) (PHPStan with Laravel rules) with `--memory-limit=-1` and the GitHub error format, so issues show up inline in the PR diff.
 
 ### Path
+
 ```
 .github/workflows/code-analysis.yml
 ```
 
-### Code
+### Example caller
+
 ```yml
 name: Code Analysis
 
@@ -242,26 +310,23 @@ jobs:
       TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
     with:
       php_version: '8.3'
-      larastan_config_file: 'phpstan.php'
+      larastan_config_file: 'phpstan.neon.dist'
 ```
 
 ### Inputs
-- php_version (string, default: '8.3')
-- larastan_config_file (string, default: 'phpstan.neon.dist') – Larastan/PHPStan config file
-- custom_commands (string, default: '') – Optional shell commands before install/analysis
-- secrets.TOKEN – Optional GitHub token for Composer installs
 
-### Example
-Use a custom config and a pre-step
-```yml
-with:
-  larastan_config_file: 'phpstan.php'
-  custom_commands: 'echo Preparing analysis'
-```
+| Input | Type | Default | Purpose |
+|---|---|---|---|
+| `php_version` | string | `'8.3'` | PHP version. |
+| `larastan_config_file` | string | `'phpstan.neon.dist'` | Path to the PHPStan config. |
+| `custom_commands` | string | `''` | Shell commands that run before Composer install. |
+| `timeout_minutes` | number | `5` | Job timeout in minutes. |
+
+Required secret: `TOKEN` if `composer.json` pulls private packages.
 
 ## Auto Merge
 
-Workflow that can automatically merge Dependabot pull requests after the CI builds has run successfully.
+Automatically merges Dependabot pull requests for minor and patch version bumps once all required checks pass. Major updates stay manual so you can review breaking changes.
 
 ### Path
 
@@ -269,7 +334,7 @@ Workflow that can automatically merge Dependabot pull requests after the CI buil
 .github/workflows/auto-merge.yml
 ```
 
-### Code
+### Example caller
 
 ```yml
 name: Auto Merge
@@ -284,32 +349,30 @@ jobs:
       TOKEN: ${{ secrets.KEYMASTER_TOKEN }}
 ```
 
-### Notes
-- Requires a token with repo permissions in secrets.KEYMASTER_TOKEN
-- Automatically merges Dependabot PRs that are minor or patch updates after checks pass
+### Requirements
 
-## Support Us
+- A `TOKEN` secret holding a PAT (or GitHub App token) with `repo` and `pull-request` write access. The default `GITHUB_TOKEN` can't enable auto-merge on a PR opened by Dependabot.
+- Auto-merge switched on under Settings → General → Pull Requests for the repo's default branch.
 
-Creating and maintaining open-source projects requires significant time and effort. Your support will help enhance the
-project and enable further contributions to the Laravel community.
+### Behavior notes
 
-Sponsorship can be made through the [GitHub Sponsors](https://github.com/sponsors/mozex) program. Just click the "**[Sponsor](https://github.com/sponsors/mozex)**" button at the top of this repository. Any amount is greatly appreciated, even a contribution as small as $1 can make a big difference and will go directly towards developing and improving this package.
+- The job only runs when the PR actor is `dependabot[bot]`.
+- It uses `gh pr merge --auto --merge`, so the PR waits for required checks before the merge fires.
+- Major version bumps from Dependabot are intentionally skipped. They need human review.
 
-Thank you for considering sponsoring. Your support truly makes a difference!
+## Support This Project
 
-## Contributing
+I maintain this package along with [several other open-source PHP packages](https://mozex.dev/docs) used by thousands of developers every day.
 
-Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
+If my packages save you time or help your business, consider [**sponsoring my work on GitHub Sponsors**](https://github.com/sponsors/mozex). Your support lets me keep these packages updated, respond to issues quickly, and ship new features.
 
-## Security Vulnerabilities
+Business sponsors get logo placement in package READMEs. [**See sponsorship tiers →**](https://github.com/sponsors/mozex)
 
-Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
+## Contributing & Security
 
-## Credits
-
-- [Mozex](https://github.com/mozex)
-- [All Contributors](../../contributors)
+- Development setup and PR guidelines: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Reporting security issues: [security policy](../../security/policy)
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+The MIT License (MIT). See [LICENSE.md](LICENSE.md).
