@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: 'testing'
+      enable_redis:
+        description: 'Start the pre-installed Redis server on the runner.'
+        required: false
+        type: boolean
+        default: false
       enable_sharding:
         description: 'Enable test sharding for parallel execution.'
         required: false
@@ -170,6 +175,12 @@ jobs:
             echo "Created database: $DB_NAME"
           done
 
+      - name: Start Redis
+        if: inputs.enable_redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
+
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v4
         with:
@@ -287,6 +298,12 @@ jobs:
             sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\";"
             echo "Created database: $DB_NAME"
           done
+
+      - name: Start Redis
+        if: inputs.enable_redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v4
