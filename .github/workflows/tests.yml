@@ -133,7 +133,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
-          extensions: ${{ inputs.php_extensions }}
+          extensions: ${{ inputs.php_extensions }}${{ inputs.enable_redis && ', redis' || '' }}
           coverage: none
 
       - name: Install APT Packages
@@ -177,9 +177,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        run: |
-          sudo systemctl start redis-server
-          redis-cli ping
+        uses: shogo82148/actions-setup-redis@v1
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v4
@@ -268,7 +266,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
-          extensions: ${{ inputs.php_extensions }}
+          extensions: ${{ inputs.php_extensions }}${{ inputs.enable_redis && ', redis' || '' }}
           coverage: none
 
       - name: Custom Commands
@@ -301,9 +299,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        run: |
-          sudo systemctl start redis-server
-          redis-cli ping
+        uses: shogo82148/actions-setup-redis@v1
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@v4
