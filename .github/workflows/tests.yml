@@ -33,12 +33,12 @@ on:
         type: string
         default: ''
       database_driver:
-        description: 'Database driver: mysql, sqlite, or none.'
+        description: 'Database driver: mysql, pgsql, sqlite, or none.'
         required: false
         type: string
         default: 'mysql'
       databases:
-        description: 'Comma-separated list of database names to create (MySQL only).'
+        description: 'Comma-separated list of database names to create (MySQL/PostgreSQL only).'
         required: false
         type: string
         default: 'testing'
@@ -149,13 +149,24 @@ jobs:
       - name: Prepare The Environment
         run: cp .env.example .env
 
-      - name: Create Database
+      - name: Create Database (MySQL)
         if: inputs.database_driver == 'mysql'
         run: |
           sudo systemctl start mysql
           IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
           for DB_NAME in "${DB_NAMES[@]}"; do
             mysql --user="root" --password="root" -e "CREATE DATABASE \`$DB_NAME\` character set UTF8mb4 collate utf8mb4_bin;"
+            echo "Created database: $DB_NAME"
+          done
+
+      - name: Create Database (PostgreSQL)
+        if: inputs.database_driver == 'pgsql'
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'root';"
+          IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
+          for DB_NAME in "${DB_NAMES[@]}"; do
+            sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\";"
             echo "Created database: $DB_NAME"
           done
 
@@ -256,13 +267,24 @@ jobs:
       - name: Prepare The Environment
         run: cp .env.example .env
 
-      - name: Create Database
+      - name: Create Database (MySQL)
         if: inputs.database_driver == 'mysql'
         run: |
           sudo systemctl start mysql
           IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
           for DB_NAME in "${DB_NAMES[@]}"; do
             mysql --user="root" --password="root" -e "CREATE DATABASE \`$DB_NAME\` character set UTF8mb4 collate utf8mb4_bin;"
+            echo "Created database: $DB_NAME"
+          done
+
+      - name: Create Database (PostgreSQL)
+        if: inputs.database_driver == 'pgsql'
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'root';"
+          IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
+          for DB_NAME in "${DB_NAMES[@]}"; do
+            sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\";"
             echo "Created database: $DB_NAME"
           done
 
