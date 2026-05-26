@@ -127,10 +127,10 @@ jobs:
         shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1,2,3,4]') || fromJson('[1]') }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}${{ inputs.enable_redis && ', redis' || '' }}
@@ -138,14 +138,14 @@ jobs:
 
       - name: Install APT Packages
         if: inputs.apt_packages != ''
-        uses: awalsh128/cache-apt-pkgs-action@v1
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17 # v1
         with:
           packages: ${{ inputs.apt_packages }}
           version: 1.0
 
       - name: Setup FFmpeg
         if: inputs.install_ffmpeg
-        uses: AnimMouse/setup-ffmpeg@v1
+        uses: AnimMouse/setup-ffmpeg@ae28d57dabbb148eff63170b6bf7f2b60062cbae # v1
 
       - name: Custom Commands
         if: "inputs.custom_commands != ''"
@@ -177,10 +177,10 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@v1
+        uses: shogo82148/actions-setup-redis@bd623e2f740257df88cb670bdd279f3a9182f828 # v1
 
       - name: Install Composer Dependencies
-        uses: ramsey/composer-install@v4
+        uses: ramsey/composer-install@5c2bcf28d7b060ef3c601d7b476d5430a7b46c27 # v4
         with:
           composer-options: "--prefer-dist"
         env:
@@ -199,7 +199,7 @@ jobs:
 
       - name: Setup Node
         if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.node_package_manager }}
@@ -228,7 +228,7 @@ jobs:
       - name: Cache Playwright browsers
         if: inputs.install_playwright
         id: playwright-cache
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -260,10 +260,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}${{ inputs.enable_redis && ', redis' || '' }}
@@ -299,10 +299,10 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@v1
+        uses: shogo82148/actions-setup-redis@bd623e2f740257df88cb670bdd279f3a9182f828 # v1
 
       - name: Install Composer Dependencies
-        uses: ramsey/composer-install@v4
+        uses: ramsey/composer-install@5c2bcf28d7b060ef3c601d7b476d5430a7b46c27 # v4
         with:
           composer-options: "--prefer-dist"
         env:
@@ -312,7 +312,7 @@ jobs:
         run: php artisan key:generate
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ inputs.python_version }}
 

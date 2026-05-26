@@ -1,0 +1,56 @@
+name: Changelog
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Branch to check out and commit the updated changelog to. Defaults to the release target branch.'
+        required: false
+        type: string
+        default: ''
+      commit_message:
+        description: 'Commit message for the changelog update.'
+        required: false
+        type: string
+        default: 'Update CHANGELOG'
+      file_pattern:
+        description: 'File pattern for the committed changelog.'
+        required: false
+        type: string
+        default: 'CHANGELOG.md'
+      timeout_minutes:
+        description: 'Timeout in minutes for the job.'
+        required: false
+        type: number
+        default: 5
+
+permissions:
+  contents: write
+
+concurrency:
+  group: changelog-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Update
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.ref || github.event.release.target_commitish }}
+
+      - name: Update Changelog
+        uses: stefanzweifel/changelog-updater-action@a938690fad7edf25368f37e43a1ed1b34303eb36 # v1
+        with:
+          latest-version: ${{ github.event.release.name }}
+          release-notes: ${{ github.event.release.body }}
+
+      - name: Commit Updated Changelog
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7
+        with:
+          branch: ${{ inputs.ref || github.event.release.target_commitish }}
+          commit_message: ${{ inputs.commit_message }}
+          file_pattern: ${{ inputs.file_pattern }}
