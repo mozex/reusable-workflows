@@ -184,7 +184,7 @@ jobs:
         with:
           composer-options: "--prefer-dist"
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN || github.token }}"}}'
 
       - name: Generate Application Key
         run: php artisan key:generate
@@ -306,7 +306,7 @@ jobs:
         with:
           composer-options: "--prefer-dist"
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN || github.token }}"}}'
 
       - name: Generate Application Key
         run: php artisan key:generate

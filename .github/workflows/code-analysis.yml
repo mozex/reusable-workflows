@@ -62,7 +62,7 @@ jobs:
         with:
           composer-options: "--prefer-dist"
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN }}"}}'
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN || github.token }}"}}'
 
       - name: Analyse Code
         run: ./vendor/bin/phpstan analyse -c ${{ inputs.larastan_config_file }} --memory-limit=-1 --error-format=github
