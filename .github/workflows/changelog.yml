@@ -48,9 +48,15 @@ jobs:
           latest-version: ${{ github.event.release.name }}
           release-notes: ${{ github.event.release.body }}
 
+      # Commit via the GitHub API (GraphQL) so GitHub signs the commit server-side and it
+      # lands as a Verified commit — satisfies a `required_signatures` ruleset with the plain
+      # GITHUB_TOKEN (no PAT, no GPG key). Requires the calling job to grant `contents: write`.
       - name: Commit Updated Changelog
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7
+        uses: planetscale/ghcommit-action@25309d8005ac7c3bcd61d3fe19b69e0fe47dbdde # v0.2.20
         with:
-          branch: ${{ inputs.ref || github.event.release.target_commitish }}
           commit_message: ${{ inputs.commit_message }}
+          repo: ${{ github.repository }}
+          branch: ${{ inputs.ref || github.event.release.target_commitish }}
           file_pattern: ${{ inputs.file_pattern }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
