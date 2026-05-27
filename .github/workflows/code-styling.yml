@@ -23,8 +23,10 @@ on:
         type: number
         default: 5
 
-permissions:
-  contents: write
+# No `permissions:` block on purpose: a reusable workflow inherits the caller's
+# GITHUB_TOKEN scopes. Check-only callers can grant `contents: read` (no forced
+# write), while auto-fix callers that grant `contents: write` still get the
+# commit + push. Declaring write here would force every caller to grant write.
 
 concurrency:
   group: code-styling-${{ github.workflow }}-${{ github.ref }}
