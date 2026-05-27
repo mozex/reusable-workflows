@@ -1,0 +1,5 @@
+# This repo never uses pull requests, so the "require a pull request" ruleset rule is
+# intentionally dropped. Silence the matching Moat check; signed-commit, force-push and
+# deletion protection all remain enforced.
+[checks]
+repositories_pull_requests_require_reviews = "off"
