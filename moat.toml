@@ -3,3 +3,5 @@
 # deletion protection all remain enforced.
 [checks]
 repositories_pull_requests_require_reviews = "off"
+# The reusable changelog and auto-merge workflows declare `contents: write`.
+repositories_workflow_permissions_are_restricted = "off"
