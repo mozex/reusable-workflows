@@ -265,13 +265,7 @@ jobs:
 
       - name: Install Puppeteer Browser
         if: inputs.install_puppeteer && steps.puppeteer-cache.outputs.cache-hit != 'true'
-        # npm ci's puppeteer postinstall leaves an empty browser folder in CI (the
-        # download never completes), which makes `browsers install` short-circuit with
-        # "folder exists but executable is missing". Clear it first so this actually
-        # downloads Chrome. Only runs on a cache miss; a cache hit restores the browser.
-        run: |
-          rm -rf ~/.cache/puppeteer
-          npx puppeteer browsers install chrome
+        run: npx puppeteer browsers install chrome
 
       - name: Before Test Commands
         if: "inputs.before_test_commands != ''"
