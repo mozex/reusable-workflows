@@ -92,11 +92,6 @@ on:
         required: false
         type: boolean
         default: false
-      install_puppeteer:
-        description: 'Install and cache the Puppeteer browser (Chrome) after Node dependencies. Needed for Spatie Browsershot / PDF generation.'
-        required: false
-        type: boolean
-        default: false
       python_tests:
         description: 'Enable Python tests.'
         required: false
@@ -195,7 +190,7 @@ jobs:
         run: php artisan key:generate
 
       - name: Validate Node Package Manager
-        if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright || inputs.install_puppeteer
+        if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
         run: |
           if [ "${{ inputs.node_package_manager }}" != "yarn" ] && [ "${{ inputs.node_package_manager }}" != "npm" ]; then
             echo "Invalid node_package_manager: ${{ inputs.node_package_manager }}. Use 'yarn' or 'npm'."
@@ -203,18 +198,18 @@ jobs:
           fi
 
       - name: Setup Node
-        if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright || inputs.install_puppeteer
+        if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.node_package_manager }}
 
       - name: Install Node Dependencies (yarn)
-        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright || inputs.install_puppeteer) && inputs.node_package_manager == 'yarn'
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'yarn'
         run: yarn install --frozen-lockfile
 
       - name: Install Node Dependencies (npm)
-        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright || inputs.install_puppeteer) && inputs.node_package_manager == 'npm'
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'npm'
         run: npm ci
 
       - name: Build Node Assets (yarn)
@@ -245,27 +240,6 @@ jobs:
       - name: Install Playwright OS Dependencies
         if: inputs.install_playwright && steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-
-      # Puppeteer (used by Spatie Browsershot for PDFs) keeps its browser in a
-      # separate cache from Playwright (~/.cache/puppeteer). It is NOT provisioned by
-      # npm ci in CI, so install it explicitly and cache it keyed on the puppeteer
-      # version - a puppeteer bump pins a new Chrome, busting the cache so it reinstalls.
-      - name: Get Puppeteer version
-        if: inputs.install_puppeteer
-        id: puppeteer-version
-        run: echo "version=$(node -p 'require("puppeteer/package.json").version')" >> $GITHUB_OUTPUT
-
-      - name: Cache Puppeteer browser
-        if: inputs.install_puppeteer
-        id: puppeteer-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-        with:
-          path: ~/.cache/puppeteer
-          key: puppeteer-${{ runner.os }}-${{ steps.puppeteer-version.outputs.version }}
-
-      - name: Install Puppeteer Browser
-        if: inputs.install_puppeteer && steps.puppeteer-cache.outputs.cache-hit != 'true'
-        run: npx puppeteer browsers install chrome
 
       - name: Before Test Commands
         if: "inputs.before_test_commands != ''"
