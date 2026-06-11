@@ -71,7 +71,7 @@ on:
         description: 'Node.js version to use.'
         required: false
         type: string
-        default: '24'
+        default: '25'
       node_package_manager:
         description: 'Node package manager to use (yarn or npm).'
         required: false
