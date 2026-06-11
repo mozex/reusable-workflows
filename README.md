@@ -81,7 +81,7 @@ jobs:
 | `shard_count` | number | `4` | Number of shards when sharding is on. Any positive integer works. |
 | `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
 | `build_node_assets` | boolean | `true` | Run `yarn build` or `npm run build`. Set to `false` for apps without a frontend build step. |
-| `node_version` | string | `'25'` | Node.js version. |
+| `node_version` | string | `'24.15'` | Node.js version. |
 | `node_package_manager` | string | `'yarn'` | `yarn` or `npm`. |
 | `apt_packages` | string | `''` | Space-separated apt packages installed via `awalsh128/cache-apt-pkgs-action`. |
 | `install_ffmpeg` | boolean | `false` | Install FFmpeg and FFprobe. |
