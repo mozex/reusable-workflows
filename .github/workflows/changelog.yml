@@ -52,7 +52,7 @@ jobs:
       # lands as a Verified commit — satisfies a `required_signatures` ruleset with the plain
       # GITHUB_TOKEN (no PAT, no GPG key). Requires the calling job to grant `contents: write`.
       - name: Commit Updated Changelog
-        uses: planetscale/ghcommit-action@57a6c787385af407a557374c794a09273aaebfd7 # v0.2.21
+        uses: planetscale/ghcommit-action@a6b150b81dca5dd027baa898604418eec9e11465 # v0.2.22
         with:
           commit_message: ${{ inputs.commit_message }}
           repo: ${{ github.repository }}
