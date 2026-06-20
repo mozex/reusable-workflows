@@ -246,12 +246,41 @@ jobs:
         run: ${{ inputs.before_test_commands }}
 
       - name: Run Tests
+        id: tests
         if: inputs.enable_sharding == false
         run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always
 
       - name: Run Tests Sharded
+        id: tests_sharded
         if: inputs.enable_sharding == true
         run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
+
+      # Pest's browser plugin saves a screenshot per failing browser test to
+      # tests/Browser/Screenshots, but those files die with the runner. Upload them
+      # (only when a test step actually failed) so the failure can be reviewed later.
+      # if-no-files-found: ignore keeps non-browser failures from erroring here.
+      - name: Upload browser failure screenshots
+        if: ${{ failure() && (steps.tests.outcome == 'failure' || steps.tests_sharded.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-screenshots-${{ inputs.enable_sharding && format('shard-{0}', matrix.shard) || 'single' }}
+          path: tests/Browser/Screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # When every test PASSES but the step still exits 1 and the runner reports
+      # "Terminate orphan process" during cleanup, a leftover child process kept a
+      # ParaTest worker from exiting cleanly. These are still alive here (before the
+      # post-job cleanup), so list them to identify the culprit (node/chrome from
+      # Playwright or Browsershot, python from a module, ffmpeg, etc.). Gated on a
+      # test-step failure only, so composer/npm install failures don't trigger it.
+      - name: Diagnose lingering processes (on test failure)
+        if: ${{ failure() && (steps.tests.outcome == 'failure' || steps.tests_sharded.outcome == 'failure') }}
+        run: |
+          echo "Processes still alive after the test run (likely orphan source of a pass-but-exit-1):"
+          ps -eo pid,ppid,etimes,rss,cmd --sort=-etimes \
+            | grep -iE 'node|chrom|playwright|puppeteer|python|ffmpeg|phpunit|/pest' \
+            | grep -v grep || echo "  (none found)"
 
   python-tests:
     if: ${{ inputs.python_tests && !contains(github.event.head_commit.message, 'wip') }}
