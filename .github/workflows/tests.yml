@@ -177,7 +177,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@91ccba21831ee5c019643ffdc72378784f8c1180 # v1
+        uses: shogo82148/actions-setup-redis@81c3559f3be13c0fead88f562d48fa3a62e5fc93 # v1
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@26d8a556604053a9612623447203a691f406fbe6 # v4
@@ -228,7 +228,7 @@ jobs:
       - name: Cache Playwright browsers
         if: inputs.install_playwright
         id: playwright-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -328,7 +328,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@91ccba21831ee5c019643ffdc72378784f8c1180 # v1
+        uses: shogo82148/actions-setup-redis@81c3559f3be13c0fead88f562d48fa3a62e5fc93 # v1
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@26d8a556604053a9612623447203a691f406fbe6 # v4
@@ -341,7 +341,7 @@ jobs:
         run: php artisan key:generate
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ inputs.python_version }}
 
