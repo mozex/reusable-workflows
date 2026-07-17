@@ -138,7 +138,7 @@ jobs:
 
       - name: Install APT Packages
         if: inputs.apt_packages != ''
-        uses: awalsh128/cache-apt-pkgs-action@681749ae568c81c2037cb9185e38b709b261bd2f # v1.6.1
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
         with:
           packages: ${{ inputs.apt_packages }}
           version: 1.0
@@ -177,7 +177,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@91ccba21831ee5c019643ffdc72378784f8c1180 # v1
+        uses: shogo82148/actions-setup-redis@81c3559f3be13c0fead88f562d48fa3a62e5fc93 # v1
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@26d8a556604053a9612623447203a691f406fbe6 # v4
@@ -199,7 +199,7 @@ jobs:
 
       - name: Setup Node
         if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: ${{ inputs.node_version }}
           cache: ${{ inputs.node_package_manager }}
@@ -228,7 +228,7 @@ jobs:
       - name: Cache Playwright browsers
         if: inputs.install_playwright
         id: playwright-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -328,7 +328,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@91ccba21831ee5c019643ffdc72378784f8c1180 # v1
+        uses: shogo82148/actions-setup-redis@81c3559f3be13c0fead88f562d48fa3a62e5fc93 # v1
 
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@26d8a556604053a9612623447203a691f406fbe6 # v4
@@ -341,7 +341,7 @@ jobs:
         run: php artisan key:generate
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ inputs.python_version }}
 
