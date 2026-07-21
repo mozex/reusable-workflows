@@ -7,6 +7,11 @@ on:
         required: false
         description: 'GitHub Token used to install Composer dependencies.'
     inputs:
+      runner:
+        description: 'Runner to execute the job on (a GitHub-hosted label like ubuntu-latest, or a self-hosted runner label).'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
       php_version:
         description: 'PHP version to use.'
         required: false
@@ -54,7 +59,7 @@ jobs:
   pest:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: ${{ inputs.enable_sharding && format('Pest (Shard {0}{1}/{2})', inputs.shard_count >= 10 && matrix.shard < 10 && '0' || '', matrix.shard, inputs.shard_count) || 'Pest' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     strategy:
       fail-fast: false

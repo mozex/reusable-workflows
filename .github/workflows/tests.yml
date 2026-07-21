@@ -7,6 +7,11 @@ on:
         required: false
         description: 'GitHub Token used to install Composer dependencies.'
     inputs:
+      runner:
+        description: 'Runner to execute the jobs on (a GitHub-hosted label like ubuntu-latest, or a self-hosted runner label).'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
       php_version:
         description: 'PHP version to use.'
         required: false
@@ -119,7 +124,7 @@ jobs:
   pest:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: ${{ inputs.enable_sharding && format('Pest (Shard {0}{1}/{2})', inputs.shard_count >= 10 && matrix.shard < 10 && '0' || '', matrix.shard, inputs.shard_count) || 'Pest' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     strategy:
       fail-fast: false
@@ -245,15 +250,41 @@ jobs:
         if: "inputs.before_test_commands != ''"
         run: ${{ inputs.before_test_commands }}
 
+      # Pest's browser plugin leaks 'playwright run-server' processes under --parallel
+      # (Plugin::terminate only stops the server in the non-worker branch), so pest can
+      # exit non-zero even when every test passed. tolerate_server_leak() recognises that
+      # exact case - a leftover run-server AND a JUnit report with zero failures/errors -
+      # kills the strays, and exits 0 for it. Any real test failure (JUnit has a <failure>
+      # or <error>) still fails; non-browser projects never trigger it (no leftover server).
       - name: Run Tests
         id: tests
         if: inputs.enable_sharding == false
-        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always
+        run: |
+          set +e
+          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --log-junit "$RUNNER_TEMP/junit.xml"
+          code=$?
+          had_servers=0; pgrep -f 'playwright run-server' >/dev/null 2>&1 && had_servers=1
+          pkill -f 'playwright run-server' 2>/dev/null || true
+          if [ "$code" -ne 0 ] && [ "$had_servers" = "1" ] && [ -f "$RUNNER_TEMP/junit.xml" ] && ! grep -qE '<(failure|error)\b' "$RUNNER_TEMP/junit.xml"; then
+            echo "::warning::All tests passed but pest exited $code due to a leaked Playwright run-server under --parallel; treating as success."
+            exit 0
+          fi
+          exit $code
 
       - name: Run Tests Sharded
         id: tests_sharded
         if: inputs.enable_sharding == true
-        run: ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }}
+        run: |
+          set +e
+          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }} --log-junit "$RUNNER_TEMP/junit.xml"
+          code=$?
+          had_servers=0; pgrep -f 'playwright run-server' >/dev/null 2>&1 && had_servers=1
+          pkill -f 'playwright run-server' 2>/dev/null || true
+          if [ "$code" -ne 0 ] && [ "$had_servers" = "1" ] && [ -f "$RUNNER_TEMP/junit.xml" ] && ! grep -qE '<(failure|error)\b' "$RUNNER_TEMP/junit.xml"; then
+            echo "::warning::All tests passed but pest exited $code due to a leaked Playwright run-server under --parallel; treating as success."
+            exit 0
+          fi
+          exit $code
 
       # Pest's browser plugin saves a screenshot per failing browser test to
       # tests/Browser/Screenshots, but those files die with the runner. Upload them
@@ -285,7 +316,7 @@ jobs:
   python-tests:
     if: ${{ inputs.python_tests && !contains(github.event.head_commit.message, 'wip') }}
     name: pytest
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 10
     steps:
       - name: Checkout Code

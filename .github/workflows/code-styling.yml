@@ -3,6 +3,11 @@ name: Code Styling
 on:
   workflow_call:
     inputs:
+      runner:
+        description: 'Runner to execute the job on (a GitHub-hosted label like ubuntu-latest, or a self-hosted runner label).'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
       php_version:
         description: 'PHP version to be used.'
         required: false
@@ -36,7 +41,7 @@ jobs:
   pint:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: Pint
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       - name: Checkout Code

@@ -7,6 +7,11 @@ on:
         required: false
         description: 'GitHub Token used to install Composer dependencies.'
     inputs:
+      runner:
+        description: 'Runner to execute the job on (a GitHub-hosted label like ubuntu-latest, or a self-hosted runner label).'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
       php_version:
         description: 'PHP version to be used.'
         required: false
@@ -39,7 +44,7 @@ jobs:
   larastan:
     if: "!contains(github.event.head_commit.message, 'wip')"
     name: Larastan
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       - name: Checkout Code
