@@ -55,6 +55,13 @@ concurrency:
   group: type-coverage-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Composer disables plugins when run as the superuser, silently skipping
+  # pest's plugin registrar (so --type-coverage is unknown). Self-hosted
+  # runners commonly run as root, so allow plugins explicitly; on GitHub-
+  # hosted runners (non-root) this variable is simply ignored.
+  COMPOSER_ALLOW_SUPERUSER: 1
+
 jobs:
   pest:
     if: "!contains(github.event.head_commit.message, 'wip')"

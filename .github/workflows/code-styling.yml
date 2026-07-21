@@ -37,6 +37,12 @@ concurrency:
   group: code-styling-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Composer disables plugins when run as the superuser. This job installs no
+  # composer dependencies today, but the flag keeps the workflow root-safe if
+  # it ever does; on GitHub-hosted runners (non-root) it is simply ignored.
+  COMPOSER_ALLOW_SUPERUSER: 1
+
 jobs:
   pint:
     if: "!contains(github.event.head_commit.message, 'wip')"
