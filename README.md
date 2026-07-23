@@ -5,6 +5,7 @@ Reusable GitHub Actions workflows for Laravel application CI. Five workflows: Pe
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Self-Hosted Runners](#self-hosted-runners)
 - [Tests](#tests)
 - [Type Coverage](#type-coverage)
 - [Code Styling](#code-styling)
@@ -28,9 +29,42 @@ The test, type coverage, code analysis, and code styling workflows all share a f
 - **New commits cancel old runs.** A `concurrency` group keyed on workflow name and ref cancels any in-progress run when a new push arrives. This applies to pushes and pull requests equally, so rapid-fire commits only execute the final run. Branches are isolated from each other (different ref, different group).
 - **Least-privilege permissions.** Tests, type coverage, and code analysis request `contents: read`. Code styling and auto merge request `contents: write` because they push commits or merge PRs.
 
+## Self-Hosted Runners
+
+Every workflow accepts a `runner` input. The default is `ubuntu-latest`; pass your own label to run on your own hardware:
+
+```yml
+with:
+  runner: 'my-runner-label'
+```
+
+### One runner per machine: nothing to do
+
+A single runner instance behaves like a GitHub-hosted machine, minus the teardown. The workflows already handle the usual self-hosted quirks: `COMPOSER_ALLOW_SUPERUSER` is set for runners that run as root, and the database bootstrap is idempotent, so leftover databases from earlier runs don't break the next one.
+
+### Several runner instances on one machine: isolate them
+
+`shivammathur/setup-php` downloads Composer onto `/usr/local/bin/composer` on every job, installs global tools like Pint into `$HOME/.composer`, and symlinks into the tool cache. Those are all machine-wide paths. Run two or more runner instances on the same host and concurrent jobs overwrite each other mid-run. The failures look random and never point at the real cause:
+
+- `PHP Fatal error: Class "..." not found in phar:///usr/local/bin/composer/...` (one job rewrote the phar while another was executing it)
+- `/usr/bin/env: bad interpreter: Text file busy`
+- `Unable to find Composer at '.../setup-php/tools/composer'`
+
+The fix is three environment variables in each runner instance's `.env` file (the file next to `run.sh` in the runner directory, injected into every job). setup-php honors `SETUP_PHP_TOOLS_DIR` and `SETUP_PHP_TOOL_CACHE_DIR`, and a per-instance `HOME` separates the Composer home, npm cache, and Playwright browsers:
+
+```
+HOME=/opt/runner-homes/runner-1
+SETUP_PHP_TOOLS_DIR=/opt/runner-homes/runner-1/tools
+SETUP_PHP_TOOL_CACHE_DIR=/opt/runner-homes/runner-1/tool-cache
+```
+
+Give each instance its own directory, create the directories up front, and restart the runner services. Disk cost is small. Composer and Pint are a few megabytes per instance, and the per-instance caches warm up after one run each.
+
+Two shared paths remain: the system PHP install (setup-php's per-job ini tweaks are identical and idempotent) and the Node tool cache, which is read-only once a version is cached. When you bump the PHP or Node version, let one job run alone first so the install isn't racing its siblings.
+
 ## Tests
 
-Runs [Pest](https://pestphp.com) with Node install + Vite build baked in, plus optional parallel sharding, Playwright browsers, a separate Python test job, FFmpeg, extra apt packages, and MySQL with one or more databases.
+Runs [Pest](https://pestphp.com) with Node install + Vite build baked in, plus optional parallel sharding, Playwright browsers, a separate Python test job, FFmpeg, extra apt packages, Redis, and MySQL or PostgreSQL with one or more databases.
 
 ### Path
 
@@ -70,13 +104,16 @@ jobs:
 
 | Input | Type | Default | Purpose |
 |---|---|---|---|
+| `runner` | string | `'ubuntu-latest'` | Runner label: a GitHub-hosted label or your own. See [Self-Hosted Runners](#self-hosted-runners). |
 | `php_version` | string | `'8.3'` | PHP version for `shivammathur/setup-php`. |
 | `php_extensions` | string | See below | Comma-separated extensions. Trim the list to cut setup time (drop `imagick` and `soap` if you don't use them). |
 | `phpunit_config_file` | string | `'phpunit.xml'` | Path to the PHPUnit config. |
 | `custom_commands` | string | `''` | Shell commands that run before Composer install. |
 | `before_test_commands` | string | `''` | Shell commands that run right before Pest starts, after all other setup. Good spot for `php artisan migrate --force` or seeding. |
-| `database_driver` | string | `'mysql'` | `mysql` starts MySQL and creates databases. `sqlite` skips DB setup entirely (point your `.env` at sqlite). `none` also skips DB setup. |
-| `databases` | string | `'testing'` | Comma-separated MySQL database names. Only used when `database_driver: mysql`. |
+| `database_driver` | string | `'mysql'` | `mysql` or `pgsql` starts that service and creates databases. `sqlite` skips DB setup entirely (point your `.env` at sqlite). `none` also skips DB setup. |
+| `databases` | string | `'testing'` | Comma-separated database names. Only used when `database_driver` is `mysql` or `pgsql`. |
+| `reset_postgres_password` | boolean | `true` | Reset the postgres superuser password to `root` before creating databases. Needed on ephemeral GitHub-hosted runners; set `false` on a persistent self-hosted box whose postgres auth is already configured. |
+| `enable_redis` | boolean | `false` | Start the runner's pre-installed Redis server. |
 | `enable_sharding` | boolean | `false` | Run Pest across a matrix of parallel shards. |
 | `shard_count` | number | `4` | Number of shards when sharding is on. Any positive integer works. |
 | `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
@@ -115,6 +152,14 @@ Two MySQL databases (primary and secondary):
 ```yml
 with:
   databases: 'testing,secondary'
+```
+
+PostgreSQL with Redis:
+
+```yml
+with:
+  database_driver: 'pgsql'
+  enable_redis: true
 ```
 
 SQLite in memory instead of MySQL. Set `DB_CONNECTION=sqlite` and `DB_DATABASE=:memory:` in your `.env.example`:
@@ -212,6 +257,7 @@ jobs:
 
 | Input | Type | Default | Purpose |
 |---|---|---|---|
+| `runner` | string | `'ubuntu-latest'` | Runner label: a GitHub-hosted label or your own. See [Self-Hosted Runners](#self-hosted-runners). |
 | `php_version` | string | `'8.3'` | PHP version. |
 | `phpunit_config_file` | string | `'phpunit.xml'` | PHPUnit config. If it's not `phpunit.xml`, it's copied to that name before the run. |
 | `min` | number | `100` | Minimum type coverage percentage. The job fails below this. |
@@ -274,6 +320,7 @@ jobs:
 
 | Input | Type | Default | Purpose |
 |---|---|---|---|
+| `runner` | string | `'ubuntu-latest'` | Runner label: a GitHub-hosted label or your own. See [Self-Hosted Runners](#self-hosted-runners). |
 | `php_version` | string | `'8.3'` | PHP version. |
 | `message` | string | `'Styling'` | Commit message used when pushing auto-fixed changes. |
 | `test_mode` | boolean | `false` | Runs `pint --test` without committing. Use for read-only checks on fork PRs. |
@@ -317,6 +364,7 @@ jobs:
 
 | Input | Type | Default | Purpose |
 |---|---|---|---|
+| `runner` | string | `'ubuntu-latest'` | Runner label: a GitHub-hosted label or your own. See [Self-Hosted Runners](#self-hosted-runners). |
 | `php_version` | string | `'8.3'` | PHP version. |
 | `larastan_config_file` | string | `'phpstan.neon.dist'` | Path to the PHPStan config. |
 | `custom_commands` | string | `''` | Shell commands that run before Composer install. |
