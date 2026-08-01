@@ -257,13 +257,22 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+      # Runs on a cache HIT too, deliberately. The cache key is computed before
+      # the restore, so it can never encode whether the restored directory is
+      # complete: one run that cached a partial ~/.cache/ms-playwright poisons
+      # every later run, because nothing re-checks and the download step is
+      # skipped forever. Playwright then fails at test time with "Playwright was
+      # just installed or updated", which reads like a version problem and is
+      # not. Seen on wubly.tv 2026-08-01 against a cache written 2026-07-26;
+      # deleting the cache was the only cure.
+      #
+      # Costs ~1.7s when the browsers are already present (measured: it checks
+      # the expected revision and exits), against ~16s for the cache restore
+      # itself. The cache keeps doing its real job - saving the 268MB download -
+      # it just stops being treated as proof that the browsers exist.
       - name: Install Playwright Browsers
-        if: inputs.install_playwright && steps.playwright-cache.outputs.cache-hit != 'true'
+        if: inputs.install_playwright
         run: npx playwright install chromium --with-deps
-
-      - name: Install Playwright OS Dependencies
-        if: inputs.install_playwright && steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
 
       - name: Before Test Commands
         if: "inputs.before_test_commands != ''"
