@@ -117,6 +117,11 @@ on:
         required: false
         type: string
         default: '3.12'
+      test_processes:
+        description: 'Number of parallel Pest processes. 0 (the default) leaves it to Pest, which uses one per CPU core. Set it only from a measurement: on a self-hosted box, mild oversubscription can win, because each worker alternates between using CPU and waiting on the database, and an extra process fills that gap. Too high and it reverses.'
+        required: false
+        type: number
+        default: 0
       timeout_minutes:
         description: 'Timeout in minutes for the test job.'
         required: false
@@ -285,7 +290,7 @@ jobs:
         if: inputs.enable_sharding == false
         run: |
           set +e
-          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --log-junit "$RUNNER_TEMP/junit.xml"
+          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel ${{ inputs.test_processes > 0 && format('--processes={0}', inputs.test_processes) || '' }} --colors=always --log-junit "$RUNNER_TEMP/junit.xml"
           code=$?
           had_servers=0; pgrep -f 'playwright run-server' >/dev/null 2>&1 && had_servers=1
           pkill -f 'playwright run-server' 2>/dev/null || true
@@ -300,7 +305,7 @@ jobs:
         if: inputs.enable_sharding == true
         run: |
           set +e
-          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }} --log-junit "$RUNNER_TEMP/junit.xml"
+          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel ${{ inputs.test_processes > 0 && format('--processes={0}', inputs.test_processes) || '' }} --colors=always --shard=${{ matrix.shard }}/${{ inputs.shard_count }} --log-junit "$RUNNER_TEMP/junit.xml"
           code=$?
           had_servers=0; pgrep -f 'playwright run-server' >/dev/null 2>&1 && had_servers=1
           pkill -f 'playwright run-server' 2>/dev/null || true
