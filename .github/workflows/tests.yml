@@ -107,6 +107,11 @@ on:
         required: false
         type: boolean
         default: false
+      python_runner:
+        description: 'Runner for the Python test job. Defaults to `runner`. Set it to a GitHub-hosted label when the Pest job is self-hosted: the Python job is short and reuses no cache, so pinning it to a hosted runner keeps it off a busy self-hosted box without costing wall-clock, since it runs alongside Pest either way.'
+        required: false
+        type: string
+        default: ''
       python_version:
         description: 'Python version to use for tests.'
         required: false
@@ -335,7 +340,9 @@ jobs:
   python-tests:
     if: ${{ inputs.python_tests && !contains(github.event.head_commit.message, 'wip') }}
     name: pytest
-    runs-on: ${{ inputs.runner }}
+    # Falls back to `runner` when python_runner is unset, so callers that never
+    # set it keep their existing behaviour exactly.
+    runs-on: ${{ inputs.python_runner != '' && inputs.python_runner || inputs.runner }}
     timeout-minutes: 10
     steps:
       - name: Checkout Code
