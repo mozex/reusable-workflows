@@ -1,0 +1,182 @@
+name: Python Tests
+
+# The Python suite lives in its own reusable workflow, NOT as a second job inside
+# tests.yml, and the reason is GitHub's renderer rather than anything about
+# Python. A job declared in a called workflow ALWAYS appears in the caller's
+# graph: an `if:` that evaluates false renders it greyed out as "skipped", so
+# every repo without Python tests carried a permanent, meaningless `pytest`
+# entry - one per call, so the wubly.tv graph showed two.
+#
+# Measured 2026-08-18 rather than assumed, on a throwaway workflow:
+#   - job gated by `if:`          -> renders as skipped
+#   - job gated by an EMPTY matrix -> invisible, but FAILS the whole run
+#   - empty matrix plus an `if:`   -> the guard wins, renders as skipped again
+# There is no in-file shape that hides a job, which is why this is a file.
+#
+# A workflow that is never called does not exist in the graph at all, so a repo
+# with no Python tests simply omits the `uses:` job and sees nothing.
+
+on:
+  workflow_call:
+    secrets:
+      TOKEN:
+        required: false
+        description: 'GitHub Token used to install Composer dependencies.'
+    inputs:
+      runner:
+        description: 'Runner to execute the job on. The Python suite is short and reuses no cache, so a GitHub-hosted label is usually right even when the Pest job is self-hosted - it keeps this off a busy box at no wall-clock cost.'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      php_version:
+        description: 'PHP version to use.'
+        required: false
+        type: string
+        default: '8.3'
+      php_extensions:
+        description: 'Comma-separated PHP extensions to install.'
+        required: false
+        type: string
+        default: 'dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo'
+      python_version:
+        description: 'Python version to use for tests.'
+        required: false
+        type: string
+        default: '3.12'
+      phpunit_config_file:
+        description: 'PHPUnit configuration file.'
+        required: false
+        type: string
+        default: 'phpunit.xml'
+      custom_commands:
+        description: 'Custom commands to run.'
+        required: false
+        type: string
+        default: ''
+      before_test_commands:
+        description: 'Custom commands to run immediately before the tests.'
+        required: false
+        type: string
+        default: ''
+      database_driver:
+        description: 'Database driver: mysql, pgsql, sqlite, or none.'
+        required: false
+        type: string
+        default: 'mysql'
+      databases:
+        description: 'Comma-separated list of database names to create (MySQL/PostgreSQL only).'
+        required: false
+        type: string
+        default: 'testing'
+      reset_postgres_password:
+        description: 'Reset the postgres superuser password to root before creating databases. Needed on ephemeral GitHub-hosted runners; set false on a persistent self-hosted box whose postgres auth is already configured.'
+        required: false
+        type: boolean
+        default: true
+      enable_redis:
+        description: 'Start the pre-installed Redis server on the runner.'
+        required: false
+        type: boolean
+        default: false
+      timeout_minutes:
+        description: 'Timeout in minutes for the job.'
+        required: false
+        type: number
+        default: 10
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Composer disables plugins when run as the superuser, silently skipping
+  # pest's plugin registrar and phpstan/extension-installer. Self-hosted runners
+  # commonly run as root; on GitHub-hosted runners this is simply ignored.
+  COMPOSER_ALLOW_SUPERUSER: 1
+
+jobs:
+  python-tests:
+    if: "!contains(github.event.head_commit.message, 'wip')"
+    name: pytest
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}${{ inputs.enable_redis && ', redis' || '' }}
+          coverage: none
+
+      - name: Custom Commands
+        if: "inputs.custom_commands != ''"
+        run: ${{ inputs.custom_commands }}
+
+      - name: Prepare The Environment
+        run: cp .env.example .env
+
+      - name: Create Database (MySQL)
+        if: inputs.database_driver == 'mysql'
+        run: |
+          sudo systemctl start mysql
+          IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
+          for DB_NAME in "${DB_NAMES[@]}"; do
+            # IF NOT EXISTS, because a self-hosted runner keeps its databases
+            # between runs: a bare CREATE succeeds exactly once and then fails
+            # every later run. It also makes the step race-safe, which a
+            # check-then-create is not when several jobs share one server.
+            mysql --user="root" --password="root" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` character set UTF8mb4 collate utf8mb4_bin;"
+            echo "Ensured database: $DB_NAME"
+          done
+
+      - name: Create Database (PostgreSQL)
+        if: inputs.database_driver == 'pgsql'
+        run: |
+          sudo systemctl start postgresql.service
+          if [ "${{ inputs.reset_postgres_password }}" = "true" ]; then
+            sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'root';"
+          fi
+          IFS=',' read -ra DB_NAMES <<< "${{ inputs.databases }}"
+          for DB_NAME in "${DB_NAMES[@]}"; do
+            if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1; then
+              echo "Database already exists: $DB_NAME"
+            else
+              sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\";"
+              echo "Created database: $DB_NAME"
+            fi
+          done
+
+      - name: Start Redis
+        if: inputs.enable_redis
+        uses: shogo82148/actions-setup-redis@260698946aaa92b2a6858999fccb1a4444981d56 # v1
+
+      - name: Install Composer Dependencies
+        uses: ramsey/composer-install@26d8a556604053a9612623447203a691f406fbe6 # v4
+        with:
+          composer-options: "--prefer-dist"
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN || github.token }}"}}'
+
+      - name: Generate Application Key
+        run: php artisan key:generate
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install Python Dependencies
+        run: composer python:install
+
+      - name: Before Test Commands
+        if: "inputs.before_test_commands != ''"
+        run: ${{ inputs.before_test_commands }}
+
+      - name: Run Python Tests
+        run: php artisan python:test --configuration ${{ inputs.phpunit_config_file }}
