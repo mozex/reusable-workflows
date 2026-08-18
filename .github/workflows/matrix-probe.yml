@@ -8,17 +8,11 @@ on:
         default: false
 
 jobs:
-  # A: the shape we use today - a job gated by `if:`. Expected: renders as skipped.
-  gated_by_if:
+  # Empty matrix PLUS an `if:` guard. Does the guard stop the run-level failure
+  # while the empty matrix keeps the job out of the graph?
+  empty_matrix_with_if:
     if: ${{ inputs.feature_on }}
-    name: gated-by-if
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo hello
-
-  # B: gated by an EMPTY MATRIX. Does it render at all?
-  gated_by_empty_matrix:
-    name: gated-by-empty-matrix
+    name: empty-matrix-with-if
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,12 +20,9 @@ jobs:
     steps:
       - run: echo hello
 
-  # C: a single-entry matrix - does it still render under a "Matrix:" group?
-  single_entry_matrix:
-    name: single-entry-matrix
+  # Control: a plain job so the run has something that succeeds.
+  control:
+    name: control
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        shard: ${{ fromJson('[1]') }}
     steps:
       - run: echo hello
