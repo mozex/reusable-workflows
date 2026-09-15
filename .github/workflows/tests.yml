@@ -280,6 +280,16 @@ jobs:
         if: "inputs.before_test_commands != ''"
         run: ${{ inputs.before_test_commands }}
 
+      # Artifact names must be unique within a run, and one caller can run two
+      # suites side by side, so every upload below carries the PHPUnit config.
+      # Names cannot hold a slash: config/phpunit.xml becomes config-phpunit.xml.
+      # Runs before the tests so the failure-only uploads still have it.
+      - name: Name artifacts
+        id: artifact_names
+        env:
+          CONFIG: ${{ inputs.phpunit_config_file }}
+        run: echo "config=${CONFIG//\//-}" >> "$GITHUB_OUTPUT"
+
       # Pest's browser plugin leaks 'playwright run-server' processes under --parallel
       # (Plugin::terminate only stops the server in the non-worker branch), so pest can
       # exit non-zero even when every test passed. tolerate_server_leak() recognises that
@@ -320,22 +330,14 @@ jobs:
           fi
           exit $code
 
-      # Artifact names cannot hold a slash, so a config under a directory becomes
-      # shards-config-phpunit.xml. A pass the leaked-server check above rescued
-      # still has no file: Pest itself saw a non-zero exit and skipped the write,
-      # which the upload reports as a warning rather than a failure.
-      - name: Name shard timings artifact
-        id: shards_artifact
-        if: inputs.update_shards
-        env:
-          CONFIG: ${{ inputs.phpunit_config_file }}
-        run: echo "name=shards-${CONFIG//\//-}" >> "$GITHUB_OUTPUT"
-
+      # A pass the leaked-server check above rescued still has no file: Pest
+      # itself saw a non-zero exit and skipped the write, which the upload
+      # reports as a warning rather than a failure.
       - name: Upload shard timings
         if: inputs.update_shards
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ steps.shards_artifact.outputs.name }}
+          name: shards-${{ steps.artifact_names.outputs.config }}
           path: tests/.pest/shards.json
           # .pest is a hidden directory, which upload-artifact skips by default.
           include-hidden-files: true
@@ -350,7 +352,7 @@ jobs:
         if: ${{ failure() && (steps.tests.outcome == 'failure' || steps.tests_sharded.outcome == 'failure') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: browser-screenshots-${{ inputs.enable_sharding && format('shard-{0}', matrix.shard) || 'single' }}
+          name: browser-screenshots-${{ steps.artifact_names.outputs.config }}-${{ inputs.enable_sharding && format('shard-{0}', matrix.shard) || 'single' }}
           path: tests/Browser/Screenshots
           if-no-files-found: ignore
           retention-days: 7
