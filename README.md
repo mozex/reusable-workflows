@@ -116,6 +116,7 @@ jobs:
 | `enable_redis` | boolean | `false` | Start the runner's pre-installed Redis server. |
 | `enable_sharding` | boolean | `false` | Run Pest across a matrix of parallel shards. |
 | `shard_count` | number | `4` | Number of shards when sharding is on. Any positive integer works. |
+| `update_shards` | boolean | `false` | Run the whole suite with Pest's `--update-shards` and upload the `tests/.pest/shards.json` it writes as the artifact `shards-<phpunit_config_file>`. Needs `enable_sharding: false`. See [Time-balanced shards](#time-balanced-shards). |
 | `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
 | `build_node_assets` | boolean | `true` | Run `yarn build` or `npm run build`. Set to `false` for apps without a frontend build step. |
 | `node_version` | string | `'24.15'` | Node.js version. |
@@ -146,6 +147,45 @@ with:
   enable_sharding: true
   shard_count: 8
 ```
+
+### Time-balanced shards
+
+With `tests/.pest/shards.json` committed, Pest splits `--shard` runs by how long each test class took instead of by file count, so no shard is left running long after the others. The file only comes from a passing whole-suite run with `--update-shards`, and Pest's docs suggest refreshing it from a scheduled workflow. `update_shards: true` is that run: it records the timings and uploads the file as an artifact, and a follow-up job in your workflow downloads and commits it.
+
+```yml
+name: Update Shards
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  tests:
+    uses: mozex/reusable-workflows/.github/workflows/tests.yml@main
+    with:
+      update_shards: true
+
+  commit:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: shards-phpunit.xml
+          path: tests/.pest
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/.pest/shards.json
+          git diff --cached --quiet || git commit -m "Update test shard timings"
+          git push
+```
+
+A push made with the default `GITHUB_TOKEN` doesn't trigger other workflows, so that commit doesn't start a test run of its own. If one project runs two suites through two calls (a main config and a browser config), each upload holds only its own suite's classes, and the file has to be the union of both: merge the two `timings` objects before committing.
 
 Two MySQL databases (primary and secondary):
 

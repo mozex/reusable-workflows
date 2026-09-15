@@ -67,6 +67,11 @@ on:
         required: false
         type: number
         default: 4
+      update_shards:
+        description: 'Run the whole suite with --update-shards and upload the tests/.pest/shards.json it writes as an artifact named shards-<phpunit_config_file>, for a caller to commit. Pest balances --shard runs by the timings in that file. Only works unsharded, because Pest refuses --update-shards with --shard.'
+        required: false
+        type: boolean
+        default: false
       install_node_dependencies:
         description: 'Run yarn install or npm ci. Set to false for rare edge cases that do not need Node.'
         required: false
@@ -144,6 +149,12 @@ jobs:
       matrix:
         shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1,2,3,4]') || fromJson('[1]') }}
     steps:
+      - name: Check shard options
+        if: inputs.update_shards && inputs.enable_sharding
+        run: |
+          echo "::error::update_shards needs enable_sharding: false. Pest records timings from a whole-suite run and refuses --update-shards with --shard."
+          exit 1
+
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -280,7 +291,11 @@ jobs:
         if: inputs.enable_sharding == false
         run: |
           set +e
-          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel ${{ inputs.test_processes > 0 && format('--processes={0}', inputs.test_processes) || '' }} --colors=always --log-junit "$RUNNER_TEMP/junit.xml"
+          # Pest writes shards.json only when the run passes, so drop the committed
+          # copy first: whatever is there afterwards is this run's timings, never a
+          # stale file for the upload below to pass off as fresh.
+          ${{ inputs.update_shards && 'rm -f tests/.pest/shards.json' || '' }}
+          ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel ${{ inputs.test_processes > 0 && format('--processes={0}', inputs.test_processes) || '' }} --colors=always ${{ inputs.update_shards && '--update-shards' || '' }} --log-junit "$RUNNER_TEMP/junit.xml"
           code=$?
           had_servers=0; pgrep -f 'playwright run-server' >/dev/null 2>&1 && had_servers=1
           pkill -f 'playwright run-server' 2>/dev/null || true
@@ -304,6 +319,28 @@ jobs:
             exit 0
           fi
           exit $code
+
+      # Artifact names cannot hold a slash, so a config under a directory becomes
+      # shards-config-phpunit.xml. A pass the leaked-server check above rescued
+      # still has no file: Pest itself saw a non-zero exit and skipped the write,
+      # which the upload reports as a warning rather than a failure.
+      - name: Name shard timings artifact
+        id: shards_artifact
+        if: inputs.update_shards
+        env:
+          CONFIG: ${{ inputs.phpunit_config_file }}
+        run: echo "name=shards-${CONFIG//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload shard timings
+        if: inputs.update_shards
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.shards_artifact.outputs.name }}
+          path: tests/.pest/shards.json
+          # .pest is a hidden directory, which upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 1
 
       # Pest's browser plugin saves a screenshot per failing browser test to
       # tests/Browser/Screenshots, but those files die with the runner. Upload them
