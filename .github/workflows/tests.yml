@@ -117,7 +117,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.workflow }}-${{ github.ref }}
+  # `github.workflow` is the CALLER's name, so two jobs in one caller that both
+  # use this workflow would share a group and cancel each other if they ran at
+  # the same time. The PHPUnit config tells them apart (a main suite and a
+  # browser suite never share one), so each call gets its own group while a new
+  # push still cancels the previous run of the same suite.
+  group: tests-${{ github.workflow }}-${{ github.ref }}-${{ inputs.phpunit_config_file }}
   cancel-in-progress: true
 
 env:

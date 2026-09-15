@@ -26,7 +26,7 @@ If your `composer.json` pulls private Git packages, create a `KEYMASTER_TOKEN` s
 The test, type coverage, code analysis, and code styling workflows all share a few opinionated defaults worth knowing about:
 
 - **WIP commits skip CI.** If the commit message contains `wip`, the job exits before doing any work. Good for checkpoint commits you don't want burning CI minutes.
-- **New commits cancel old runs.** A `concurrency` group keyed on workflow name and ref cancels any in-progress run when a new push arrives. This applies to pushes and pull requests equally, so rapid-fire commits only execute the final run. Branches are isolated from each other (different ref, different group).
+- **New commits cancel old runs.** A `concurrency` group keyed on workflow name and ref cancels any in-progress run when a new push arrives. This applies to pushes and pull requests equally, so rapid-fire commits only execute the final run. Branches are isolated from each other (different ref, different group). The test workflow also adds the PHPUnit config to its group, so one caller can run two suites side by side (say `phpunit.ci.xml` and `phpunit.browser.ci.xml`) without one cancelling the other.
 - **Least-privilege permissions.** Tests, type coverage, and code analysis request `contents: read`. Code styling and auto merge request `contents: write` because they push commits or merge PRs.
 
 ## Self-Hosted Runners
