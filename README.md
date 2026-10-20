@@ -107,6 +107,7 @@ jobs:
 | `runner` | string | `'ubuntu-latest'` | Runner label: a GitHub-hosted label or your own. See [Self-Hosted Runners](#self-hosted-runners). |
 | `php_version` | string | `'8.3'` | PHP version for `shivammathur/setup-php`. |
 | `php_extensions` | string | See below | Comma-separated extensions. Trim the list to cut setup time (drop `imagick` and `soap` if you don't use them). |
+| `php_ini_values` | string | `''` | Comma-separated php.ini values, applied after the workflow's own. `opcache.enable_cli=0` turns its CLI OPcache back off. |
 | `phpunit_config_file` | string | `'phpunit.xml'` | Path to the PHPUnit config. |
 | `custom_commands` | string | `''` | Shell commands that run before Composer install. |
 | `before_test_commands` | string | `''` | Shell commands that run right before Pest starts, after all other setup. Good spot for `php artisan migrate --force` or seeding. |
@@ -123,9 +124,8 @@ jobs:
 | `node_package_manager` | string | `'yarn'` | `yarn` or `npm`. |
 | `apt_packages` | string | `''` | Space-separated apt packages installed via `awalsh128/cache-apt-pkgs-action`. |
 | `install_ffmpeg` | boolean | `false` | Install FFmpeg and FFprobe. |
-| `install_playwright` | boolean | `false` | Install Playwright Chromium plus OS deps, with cache. |
-| `python_tests` | boolean | `false` | Run a separate pytest job via `php artisan python:test`. |
-| `python_version` | string | `'3.12'` | Python version for the pytest job. |
+| `install_playwright` | boolean | `false` | Install Playwright's headless Chromium shell plus OS deps, with cache. |
+| `test_processes` | number | `0` | Parallel Pest processes. `0` leaves it to Pest, one per CPU core. |
 | `timeout_minutes` | number | `30` | Job timeout in minutes. |
 
 Default `php_extensions`: `dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo`.
@@ -135,8 +135,12 @@ Required secret: `TOKEN` if `composer.json` pulls private packages.
 ### Behavior notes
 
 - **Node install and Vite build run by default.** The workflow is designed for Laravel applications, which all have a `package.json` and a frontend build. If you have an edge-case app that doesn't need one of them, set `install_node_dependencies: false` or `build_node_assets: false`.
-- **Playwright browsers** are cached by version at `~/.cache/ms-playwright`. Cache hit: only OS deps install (apt packages aren't cacheable). Cache miss: `playwright install chromium --with-deps`.
+- **Playwright** installs only Chromium's headless shell (`--only-shell`), which is what Pest's browser plugin runs, and caches it by Playwright version at `~/.cache/ms-playwright`. The OS packages it needs install on every run, cache hit or not, because apt packages aren't cacheable.
 - **Sharding** uses Pest's `--shard=X/Y` flag, one matrix job per shard.
+- **`vendor` and `node_modules` are cached whole.** Composer's and npm's download caches still leave every package to unpack, about 20s and 15s on a large app. `vendor` is keyed on `composer.json`, `composer.lock` and any composer-patches files, and Composer still runs on a hit to regenerate the autoloader and run your scripts. `node_modules` is keyed on the runner label, the Node version, `package.json` and the lockfile, and Puppeteer's Chrome download (`~/.cache/puppeteer`) is cached with it. Self-hosted runners skip the `node_modules` cache and still run `npm ci`, because a restored `~/.cache/puppeteer` would land in the wrong home on a machine with several runner instances.
+- **OPcache is on for the CLI**, JIT off. setup-php enables OPcache for the web SAPIs only, so test processes used to compile every file they loaded. Opt out with `php_ini_values: 'opcache.enable_cli=0'`.
+- **The database skips durability work on GitHub-hosted runners.** MySQL keeps its data directory on tmpfs and turns off the binary log, the flush on every commit, the doublewrite buffer and performance_schema. PostgreSQL turns off `fsync`, `synchronous_commit` and `full_page_writes`. The data dies with the runner anyway. On a self-hosted runner the server's configuration is left untouched.
+- **The database server starts first**, without waiting, and boots while PHP and the tools install.
 
 ### More examples
 
@@ -247,13 +251,7 @@ with:
     php artisan db:seed --class=TestSeeder --force
 ```
 
-Enable the Python test job alongside Pest:
-
-```yml
-with:
-  python_tests: true
-  python_version: '3.12'
-```
+A Python suite has its own workflow, `.github/workflows/python-tests.yml`, called as a separate job next to this one. A job that's never called doesn't show up in the run graph, which an input on this workflow couldn't avoid.
 
 ## Type Coverage
 

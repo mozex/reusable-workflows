@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: 'dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo'
+      php_ini_values:
+        description: 'Comma-separated php.ini values, applied after the workflow''s own (so opcache.enable_cli=0 turns its OPcache back off).'
+        required: false
+        type: string
+        default: ''
       phpunit_config_file:
         description: 'PHPUnit configuration file.'
         required: false
@@ -167,11 +172,47 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Bringing the server up is most of the database step (about 8s on a
+      # hosted runner), so it starts here without waiting and boots while PHP
+      # and the tools install. The Create Database step's own `systemctl start`
+      # then blocks until this start finishes, and fails if it did.
+      #
+      # A hosted runner's MySQL holds nothing that outlives the job, so it skips
+      # the durability work: the binary log (on by default since 8.0), the
+      # flush on every commit, the doublewrite buffer and performance_schema,
+      # and it keeps its data directory in memory. Alternating variants on one
+      # runner, the settings took about 6% off a Laravel suite's test step and
+      # tmpfs another 2-3%, with two thirds of the fsyncs gone. A self-hosted
+      # server may hold data that matters, so it is left alone.
+      - name: Start Database Server
+        if: inputs.database_driver == 'mysql' || inputs.database_driver == 'pgsql'
+        run: |
+          if [ "${{ inputs.database_driver }}" = "mysql" ] && [ "${{ runner.environment }}" = "github-hosted" ]; then
+            printf '%s\n' '[mysqld]' 'disable-log-bin' 'innodb_flush_log_at_trx_commit=0' 'innodb_doublewrite=OFF' 'performance_schema=OFF' | sudo tee /etc/mysql/conf.d/zz-ci.cnf >/dev/null
+            sudo systemctl stop mysql
+            sudo mv /var/lib/mysql /var/lib/mysql-disk
+            sudo mkdir -m 700 /var/lib/mysql
+            sudo mount -t tmpfs tmpfs /var/lib/mysql
+            sudo cp -a /var/lib/mysql-disk/. /var/lib/mysql/
+            sudo chown mysql:mysql /var/lib/mysql
+            sudo chmod 700 /var/lib/mysql
+          fi
+          sudo systemctl start --no-block ${{ inputs.database_driver == 'mysql' && 'mysql' || 'postgresql.service' }}
+
+      # setup-php enables OPcache for the web SAPIs only, so every test process
+      # compiled each file it loaded from scratch. Alternating variants on one
+      # runner, CLI OPcache took 1-4% off a Laravel suite's test step, more on
+      # the slower CPUs. setup-php also writes opcache.jit=1235, which CLI
+      # OPcache would switch on with it; JIT gained about 2% more, too little
+      # to trade for its crash risk, so it stays off. revalidate_freq=0
+      # rechecks timestamps on every include, so a test that rewrites a PHP
+      # file and loads it again never runs the stale copy.
       - name: Setup PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}${{ inputs.enable_redis && ', redis' || '' }}
+          ini-values: opcache.enable_cli=1, opcache.jit=disable, opcache.revalidate_freq=0${{ inputs.php_ini_values != '' && format(', {0}', inputs.php_ini_values) || '' }}
           coverage: none
 
       - name: Install APT Packages
@@ -210,6 +251,12 @@ jobs:
         if: inputs.database_driver == 'pgsql'
         run: |
           sudo systemctl start postgresql.service
+          # The PostgreSQL side of the hosted-runner tuning in Start Database
+          # Server: no flush on commit, no full-page images. All three settings
+          # take effect on a reload.
+          if [ "${{ runner.environment }}" = "github-hosted" ]; then
+            sudo -u postgres psql -q -c "ALTER SYSTEM SET fsync = off" -c "ALTER SYSTEM SET synchronous_commit = off" -c "ALTER SYSTEM SET full_page_writes = off" -c "SELECT pg_reload_conf()" >/dev/null
+          fi
           if [ "${{ inputs.reset_postgres_password }}" = "true" ]; then
             sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'root';"
           fi
@@ -227,12 +274,36 @@ jobs:
         if: inputs.enable_redis
         uses: shogo82148/actions-setup-redis@260698946aaa92b2a6858999fccb1a4444981d56 # v1
 
+      # ramsey/composer-install caches Composer's downloads, which still leaves
+      # every package to unpack on each job. vendor/ itself, keyed on all that
+      # decides its contents (composer-patches files included), turns a hit into
+      # an install with nothing to do but the autoloader and the scripts.
+      # Composer still runs on a hit, so a vendor/ that drifted from the lock
+      # gets corrected rather than trusted.
+      - name: Restore Vendor
+        id: vendor_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-php${{ inputs.php_version }}-${{ hashFiles('composer.json', 'composer.lock', 'patches.json', 'patches.lock.json', 'patches/**') }}
+
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@26d8a556604053a9612623447203a691f406fbe6 # v4
         with:
           composer-options: "--prefer-dist"
+          # A restored vendor/ needs no downloads, so skip fetching that cache too.
+          ignore-cache: ${{ steps.vendor_cache.outputs.cache-hit == 'true' && 'yes' || '' }}
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.TOKEN || github.token }}"}}'
+
+      # Saved straight after the install, before anything else in the job can
+      # write into vendor/.
+      - name: Save Vendor
+        if: steps.vendor_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: vendor
+          key: ${{ steps.vendor_cache.outputs.cache-primary-key }}
 
       - name: Generate Application Key
         run: php artisan key:generate
@@ -245,20 +316,55 @@ jobs:
             exit 1
           fi
 
+      # node_modules itself rather than the package manager's download cache,
+      # which still leaves `npm ci` about 15s of unpacking and linking. Puppeteer's
+      # install script downloads its Chrome to ~/.cache/puppeteer, outside
+      # node_modules, so that rides along: a hit skips the install that would
+      # have fetched it. package.json is in the key so a manifest that no longer
+      # matches its lockfile misses and fails `npm ci` as it should.
+      #
+      # Hosted runners only: the cache stores ~/.cache/puppeteer relative to the
+      # workspace, so on a machine running several runner instances, each with
+      # its own HOME, a restore would put Chrome in another instance's home.
+      # Self-hosted runners install with `npm ci` as before.
+      - name: Restore Node Modules
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && runner.environment == 'github-hosted'
+        id: node_modules_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: |
+            node_modules
+            ~/.cache/puppeteer
+          key: node-modules-${{ inputs.runner }}-${{ runner.arch }}-node${{ inputs.node_version }}-${{ inputs.node_package_manager }}-${{ hashFiles('package.json', 'package-lock.json', 'yarn.lock', '.npmrc', '.yarnrc') }}
+
       - name: Setup Node
         if: inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: ${{ inputs.node_version }}
-          cache: ${{ inputs.node_package_manager }}
+          # The download cache only feeds an install, which a restored
+          # node_modules skips.
+          cache: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' && inputs.node_package_manager || '' }}
+          package-manager-cache: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
 
       - name: Install Node Dependencies (yarn)
-        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'yarn'
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'yarn' && steps.node_modules_cache.outputs.cache-hit != 'true'
         run: yarn install --frozen-lockfile
 
       - name: Install Node Dependencies (npm)
-        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'npm'
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && inputs.node_package_manager == 'npm' && steps.node_modules_cache.outputs.cache-hit != 'true'
         run: npm ci
+
+      # Saved before the build, so the caches some build tools keep under
+      # node_modules/.cache stay out of it.
+      - name: Save Node Modules
+        if: (inputs.install_node_dependencies || inputs.build_node_assets || inputs.install_playwright) && runner.environment == 'github-hosted' && steps.node_modules_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: |
+            node_modules
+            ~/.cache/puppeteer
+          key: ${{ steps.node_modules_cache.outputs.cache-primary-key }}
 
       - name: Build Node Assets (yarn)
         if: inputs.build_node_assets && inputs.node_package_manager == 'yarn'
@@ -273,17 +379,20 @@ jobs:
         id: playwright-version
         run: echo "version=$(npx playwright --version)" >> $GITHUB_OUTPUT
 
+      # Pest's browser plugin launches Chromium headless, which Playwright serves
+      # from its headless shell, so the full Chromium build is never started.
+      # --only-shell skips it: about 280 MB of cache down to the shell alone.
       - name: Cache Playwright browsers
         if: inputs.install_playwright
         id: playwright-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}-headless-shell
 
       - name: Install Playwright Browsers
         if: inputs.install_playwright
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install chromium --only-shell --with-deps
 
       - name: Before Test Commands
         if: "inputs.before_test_commands != ''"
