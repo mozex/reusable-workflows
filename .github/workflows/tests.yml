@@ -272,7 +272,7 @@ jobs:
 
       - name: Start Redis
         if: inputs.enable_redis
-        uses: shogo82148/actions-setup-redis@260698946aaa92b2a6858999fccb1a4444981d56 # v1
+        uses: shogo82148/actions-setup-redis@88a1fb308aae95aa485bf3da667c9d6e61be4c53 # v1
 
       # ramsey/composer-install caches Composer's downloads, which still leaves
       # every package to unpack on each job. vendor/ itself, keyed on all that
