@@ -88,10 +88,10 @@ on:
         type: boolean
         default: true
       node_version:
-        description: 'Node.js version to use.'
+        description: 'Node.js version to use. A bare major such as 24 takes the build the runner image already ships; a full version such as 24.15 is downloaded on every job.'
         required: false
         type: string
-        default: '24.15'
+        default: '24'
       node_package_manager:
         description: 'Node package manager to use (yarn or npm).'
         required: false

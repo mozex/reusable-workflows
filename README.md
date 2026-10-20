@@ -120,7 +120,7 @@ jobs:
 | `update_shards` | boolean | `false` | Run the whole suite with Pest's `--update-shards` and upload the `tests/.pest/shards.json` it writes as the artifact `shards-<phpunit_config_file>`. Needs `enable_sharding: false`. See [Time-balanced shards](#time-balanced-shards). |
 | `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
 | `build_node_assets` | boolean | `true` | Run `yarn build` or `npm run build`. Set to `false` for apps without a frontend build step. |
-| `node_version` | string | `'24.15'` | Node.js version. |
+| `node_version` | string | `'24'` | Node.js version. A bare major uses the build the runner image ships; a full version like `'24.15'` is downloaded on every job, about 7s. |
 | `node_package_manager` | string | `'yarn'` | `yarn` or `npm`. |
 | `apt_packages` | string | `''` | Space-separated apt packages installed via `awalsh128/cache-apt-pkgs-action`. |
 | `install_ffmpeg` | boolean | `false` | Install FFmpeg and FFprobe. |
