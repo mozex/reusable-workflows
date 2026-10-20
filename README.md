@@ -115,7 +115,7 @@ jobs:
 | `reset_postgres_password` | boolean | `true` | Reset the postgres superuser password to `root` before creating databases. Needed on ephemeral GitHub-hosted runners; set `false` on a persistent self-hosted box whose postgres auth is already configured. |
 | `enable_redis` | boolean | `false` | Start the runner's pre-installed Redis server. |
 | `enable_sharding` | boolean | `false` | Run Pest across a matrix of parallel shards. |
-| `shard_count` | number | `4` | Number of shards when sharding is on. Any positive integer works. |
+| `shard_count` | number | `4` | Number of shards when sharding is on, from 2 to 20. Any other value fails the job. |
 | `update_shards` | boolean | `false` | Run the whole suite with Pest's `--update-shards` and upload the `tests/.pest/shards.json` it writes as the artifact `shards-<phpunit_config_file>`. Needs `enable_sharding: false`. See [Time-balanced shards](#time-balanced-shards). |
 | `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
 | `build_node_assets` | boolean | `true` | Run `yarn build` or `npm run build`. Set to `false` for apps without a frontend build step. |
@@ -136,7 +136,7 @@ Required secret: `TOKEN` if `composer.json` pulls private packages.
 
 - **Node install and Vite build run by default.** The workflow is designed for Laravel applications, which all have a `package.json` and a frontend build. If you have an edge-case app that doesn't need one of them, set `install_node_dependencies: false` or `build_node_assets: false`.
 - **Playwright browsers** are cached by version at `~/.cache/ms-playwright`. Cache hit: only OS deps install (apt packages aren't cacheable). Cache miss: `playwright install chromium --with-deps`.
-- **Sharding** uses Pest's `--shard=X/Y` flag. A small `setup` job generates the shard list before the test jobs fan out, so you can pick any count: 2, 3, 8, 17, whatever.
+- **Sharding** uses Pest's `--shard=X/Y` flag, one matrix job per shard.
 
 ### More examples
 
