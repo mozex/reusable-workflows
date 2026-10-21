@@ -530,9 +530,11 @@ jobs:
           GH_TOKEN: ${{ secrets.TOKEN }}
           VARIABLE: ${{ inputs.shard_variable }}
         run: |
+          # Pest skips the file when its own exit code was not 0, which happens
+          # on a pass Run Tests rescued from a leaked Playwright server. The
+          # count still holds; without timings a sharded run splits by file.
           if [ ! -f tests/.pest/shards.json ]; then
-            echo "::error::Pest wrote no tests/.pest/shards.json, so there are no timings to save."
-            exit 1
+            echo "::warning::Pest wrote no tests/.pest/shards.json, so only the shard count is saved."
           fi
           setup=$(( SETUP_SECONDS + 10 ))
           count=$(( TESTS_SECONDS / (3 * setup) ))
@@ -542,7 +544,7 @@ jobs:
           # value would stop all its runs: warnings go to stderr, encoding errors
           # throw. A class kept at 0.1s or more still counts when Pest shares the
           # classes out, where a rounded 0 would pile every such class on one shard.
-          php -d display_errors=stderr -r '$s = json_decode(file_get_contents("tests/.pest/shards.json"), true, flags: JSON_THROW_ON_ERROR); $s["timings"] = array_map(fn ($t) => max(round($t, 1), 0.1), $s["timings"]); echo json_encode(["count" => (int) $argv[1], "tests_seconds" => (int) $argv[2], "setup_seconds" => (int) $argv[3], "timings" => base64_encode(gzencode(json_encode($s, JSON_THROW_ON_ERROR), 9))], JSON_THROW_ON_ERROR);' "$count" "$TESTS_SECONDS" "$setup" > "$RUNNER_TEMP/shard-settings.json"
+          php -d display_errors=stderr -r '$file = "tests/.pest/shards.json"; $timings = ""; if (is_file($file)) { $s = json_decode(file_get_contents($file), true, flags: JSON_THROW_ON_ERROR); $s["timings"] = array_map(fn ($t) => max(round($t, 1), 0.1), $s["timings"]); $timings = base64_encode(gzencode(json_encode($s, JSON_THROW_ON_ERROR), 9)); } echo json_encode(["count" => (int) $argv[1], "tests_seconds" => (int) $argv[2], "setup_seconds" => (int) $argv[3], "timings" => $timings], JSON_THROW_ON_ERROR);' "$count" "$TESTS_SECONDS" "$setup" > "$RUNNER_TEMP/shard-settings.json"
           gh variable set "$VARIABLE" --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/shard-settings.json"
           echo "Saved to \`$VARIABLE\`: $count shard(s), from ${TESTS_SECONDS}s of tests against ${setup}s of setup." >> "$GITHUB_STEP_SUMMARY"
 
