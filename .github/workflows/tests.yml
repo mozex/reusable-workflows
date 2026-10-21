@@ -5,7 +5,7 @@ on:
     secrets:
       TOKEN:
         required: false
-        description: 'GitHub Token used to install Composer dependencies.'
+        description: 'GitHub Token used to install Composer dependencies, and with shard_variable to save the shard settings (it must be able to write repository variables).'
     inputs:
       runner:
         description: 'Runner to execute the jobs on (a GitHub-hosted label like ubuntu-latest, or a self-hosted runner label).'
@@ -77,6 +77,16 @@ on:
         required: false
         type: boolean
         default: false
+      shard_variable:
+        description: 'With update_shards, the repository variable to save this suite''s shard settings to, as JSON: the shard count the measured run calls for and the timings, gzipped and base64-encoded. Writing it needs the TOKEN secret and the GitHub CLI on the runner (hosted images have it). Empty leaves the artifact upload as the only output.'
+        required: false
+        type: string
+        default: ''
+      shard_timings:
+        description: 'The timings field of a shard_variable, for a sharded run to balance by in place of a committed tests/.pest/shards.json. Empty leaves the committed file, if any, in charge.'
+        required: false
+        type: string
+        default: ''
       install_node_dependencies:
         description: 'Run yarn install or npm ci. Set to false for rare edge cases that do not need Node.'
         required: false
@@ -154,11 +164,33 @@ jobs:
       matrix:
         shard: ${{ inputs.enable_sharding && fromJson(inputs.shard_count == 2 && '[1,2]' || inputs.shard_count == 3 && '[1,2,3]' || inputs.shard_count == 4 && '[1,2,3,4]' || inputs.shard_count == 5 && '[1,2,3,4,5]' || inputs.shard_count == 6 && '[1,2,3,4,5,6]' || inputs.shard_count == 7 && '[1,2,3,4,5,6,7]' || inputs.shard_count == 8 && '[1,2,3,4,5,6,7,8]' || inputs.shard_count == 9 && '[1,2,3,4,5,6,7,8,9]' || inputs.shard_count == 10 && '[1,2,3,4,5,6,7,8,9,10]' || inputs.shard_count == 11 && '[1,2,3,4,5,6,7,8,9,10,11]' || inputs.shard_count == 12 && '[1,2,3,4,5,6,7,8,9,10,11,12]' || inputs.shard_count == 13 && '[1,2,3,4,5,6,7,8,9,10,11,12,13]' || inputs.shard_count == 14 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14]' || inputs.shard_count == 15 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]' || inputs.shard_count == 16 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]' || inputs.shard_count == 17 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]' || inputs.shard_count == 18 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]' || inputs.shard_count == 19 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]' || inputs.shard_count == 20 && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' || '[1]') || fromJson('[1]') }}
     steps:
+      # The shard settings weigh test time against setup time, and setup is
+      # everything from here to the test step. The runner's own set-up before
+      # this step and the clean-up after the tests are not seen, so the
+      # calculations below add a fixed allowance for them.
+      - name: Record Start
+        run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Check shard options
         if: inputs.update_shards && inputs.enable_sharding
         run: |
           echo "::error::update_shards needs enable_sharding: false. Pest records timings from a whole-suite run and refuses --update-shards with --shard."
           exit 1
+
+      # Here rather than at the save, which comes after the whole suite.
+      - name: Check shard variable
+        if: inputs.shard_variable != ''
+        env:
+          GH_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          if [ "${{ inputs.update_shards }}" != "true" ]; then
+            echo "::error::shard_variable needs update_shards: true. Only a whole-suite run measures what it saves."
+            exit 1
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::shard_variable needs the TOKEN secret, with permission to write repository variables."
+            exit 1
+          fi
 
       # The matrix above can only spell out the counts it lists. Any other count
       # gets a single job running --shard=1/N, which would quietly skip every
@@ -398,6 +430,29 @@ jobs:
         if: "inputs.before_test_commands != ''"
         run: ${{ inputs.before_test_commands }}
 
+      # The timings a refresh run saved (see Save Shard Settings). Pest reads
+      # them only from tests/.pest/shards.json, so a sharded run puts them
+      # there, over any committed copy. Settings older than 30 days get a
+      # notice on the first job: the suite has likely moved since, both in how
+      # its tests share out and in how many shards pay for their setup.
+      - name: Load Shard Timings
+        if: inputs.shard_timings != ''
+        env:
+          SHARD_TIMINGS: ${{ inputs.shard_timings }}
+        run: |
+          printf '%s' "$SHARD_TIMINGS" | base64 -d | gunzip > "$RUNNER_TEMP/shards.json"
+          if [ "${{ inputs.enable_sharding }}" = "true" ]; then
+            mkdir -p tests/.pest
+            cp "$RUNNER_TEMP/shards.json" tests/.pest/shards.json
+          fi
+          updated=$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["updated_at"] ?? "";' "$RUNNER_TEMP/shards.json")
+          if [ -n "$updated" ] && [ "${{ matrix.shard }}" = "1" ]; then
+            days=$(( ( $(date +%s) - $(date -d "$updated" +%s) ) / 86400 ))
+            if [ "$days" -gt 30 ]; then
+              echo "::notice title=Shard settings are $days days old::Run the caller's update_shards workflow to measure the suite again."
+            fi
+          fi
+
       # Artifact names must be unique within a run, and one caller can run two
       # suites side by side, so every upload below carries the PHPUnit config.
       # Names cannot hold a slash: config/phpunit.xml becomes config-phpunit.xml.
@@ -423,8 +478,11 @@ jobs:
           # copy first: whatever is there afterwards is this run's timings, never a
           # stale file for the upload below to pass off as fresh.
           ${{ inputs.update_shards && 'rm -f tests/.pest/shards.json' || '' }}
+          started=$(date +%s)
           ./vendor/bin/pest --ci -c ${{ inputs.phpunit_config_file }} --parallel ${{ inputs.test_processes > 0 && format('--processes={0}', inputs.test_processes) || '' }} --colors=always ${{ inputs.update_shards && '--update-shards' || '' }} --log-junit "$RUNNER_TEMP/junit.xml"
           code=$?
+          echo "TESTS_SECONDS=$(( $(date +%s) - started ))" >> "$GITHUB_ENV"
+          echo "SETUP_SECONDS=$(( started - JOB_STARTED_AT ))" >> "$GITHUB_ENV"
           had_servers=0; pgrep -f 'playwright run-server' >/dev/null 2>&1 && had_servers=1
           pkill -f 'playwright run-server' 2>/dev/null || true
           if [ "$code" -ne 0 ] && [ "$had_servers" = "1" ] && [ -f "$RUNNER_TEMP/junit.xml" ] && ! grep -qE '<(failure|error)\b' "$RUNNER_TEMP/junit.xml"; then
@@ -461,6 +519,44 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 1
+
+      # The shard count is the largest that keeps each shard's tests running
+      # for at least three times its setup. Every added shard bills its setup
+      # again and saves less wall clock than the one before, so past that point
+      # it mostly buys setup. One machine measured the whole suite here, with
+      # the setup a shard would have, and 10s stands for the runner's own
+      # set-up and clean-up, which Record Start can't see.
+      - name: Save Shard Settings
+        if: inputs.update_shards && inputs.shard_variable != '' && steps.tests.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.TOKEN }}
+          VARIABLE: ${{ inputs.shard_variable }}
+        run: |
+          if [ ! -f tests/.pest/shards.json ]; then
+            echo "::error::Pest wrote no tests/.pest/shards.json, so there are no timings to save."
+            exit 1
+          fi
+          setup=$(( SETUP_SECONDS + 10 ))
+          count=$(( TESTS_SECONDS / (3 * setup) ))
+          if [ "$count" -lt 1 ]; then count=1; fi
+          if [ "$count" -gt 20 ]; then count=20; fi
+          # Every caller parses this variable before its jobs start, so a broken
+          # value would stop all its runs: warnings go to stderr, encoding errors
+          # throw. A class kept at 0.1s or more still counts when Pest shares the
+          # classes out, where a rounded 0 would pile every such class on one shard.
+          php -d display_errors=stderr -r '$s = json_decode(file_get_contents("tests/.pest/shards.json"), true, flags: JSON_THROW_ON_ERROR); $s["timings"] = array_map(fn ($t) => max(round($t, 1), 0.1), $s["timings"]); echo json_encode(["count" => (int) $argv[1], "tests_seconds" => (int) $argv[2], "setup_seconds" => (int) $argv[3], "timings" => base64_encode(gzencode(json_encode($s, JSON_THROW_ON_ERROR), 9))], JSON_THROW_ON_ERROR);' "$count" "$TESTS_SECONDS" "$setup" > "$RUNNER_TEMP/shard-settings.json"
+          gh variable set "$VARIABLE" --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/shard-settings.json"
+          echo "Saved to \`$VARIABLE\`: $count shard(s), from ${TESTS_SECONDS}s of tests against ${setup}s of setup." >> "$GITHUB_STEP_SUMMARY"
+
+      # The same rule from the other side: a suite running on one machine that
+      # has grown to six times its setup would now run at least two shards.
+      - name: Shard Advice
+        if: "!inputs.update_shards && !inputs.enable_sharding"
+        run: |
+          setup=$(( SETUP_SECONDS + 10 ))
+          if [ "$TESTS_SECONDS" -ge $(( 6 * setup )) ]; then
+            echo "::notice title=This suite has outgrown one machine::The tests ran ${TESTS_SECONDS}s against ${setup}s of setup. Run the caller's update_shards workflow to save a shard count."
+          fi
 
       # Pest's browser plugin saves a screenshot per failing browser test to
       # tests/Browser/Screenshots, but those files die with the runner. Upload them
