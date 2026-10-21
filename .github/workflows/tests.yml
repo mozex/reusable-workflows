@@ -431,21 +431,19 @@ jobs:
         run: ${{ inputs.before_test_commands }}
 
       # The timings a refresh run saved (see Save Shard Settings). Pest reads
-      # them only from tests/.pest/shards.json, so a sharded run puts them
-      # there, over any committed copy. Settings older than 30 days get a
-      # notice on the first job: the suite has likely moved since, both in how
-      # its tests share out and in how many shards pay for their setup.
+      # them only from tests/.pest/shards.json, so they go there, over any
+      # committed copy. Settings older than 30 days get a notice on the first
+      # shard: the suite has likely moved since, both in how its tests share
+      # out and in how many shards pay for their setup. A suite on one machine
+      # needs neither; Shard Advice tells it when it has outgrown that.
       - name: Load Shard Timings
-        if: inputs.shard_timings != ''
+        if: inputs.enable_sharding && inputs.shard_timings != ''
         env:
           SHARD_TIMINGS: ${{ inputs.shard_timings }}
         run: |
-          printf '%s' "$SHARD_TIMINGS" | base64 -d | gunzip > "$RUNNER_TEMP/shards.json"
-          if [ "${{ inputs.enable_sharding }}" = "true" ]; then
-            mkdir -p tests/.pest
-            cp "$RUNNER_TEMP/shards.json" tests/.pest/shards.json
-          fi
-          updated=$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["updated_at"] ?? "";' "$RUNNER_TEMP/shards.json")
+          mkdir -p tests/.pest
+          printf '%s' "$SHARD_TIMINGS" | base64 -d | gunzip > tests/.pest/shards.json
+          updated=$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["updated_at"] ?? "";' tests/.pest/shards.json)
           if [ -n "$updated" ] && [ "${{ matrix.shard }}" = "1" ]; then
             days=$(( ( $(date +%s) - $(date -d "$updated" +%s) ) / 86400 ))
             if [ "$days" -gt 30 ]; then

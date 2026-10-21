@@ -220,7 +220,7 @@ with:
 - **The count** is the largest that keeps each shard's tests running for at least three times its setup (dependencies, database, asset build), as measured in the refresh run. Each added shard pays for its setup again and saves less waiting than the one before, so past that point it mostly buys setup. A suite under six times its setup runs on one machine.
 - **The refresh call must match the test run's** `runner`, `test_processes`, database and setup commands, since the count and timings only hold for the setup they were measured on.
 - **The variable** holds `{"count", "tests_seconds", "setup_seconds", "timings"}`, with the timings gzipped and base64-encoded to stay well under GitHub's 48 KB limit. `setup_seconds` includes 10 seconds for the runner's own start and clean-up. One variable per suite: two calls (a main and a browser config) each get their own, and need no merging.
-- **Notices** say when to refresh: a run whose saved timings are over 30 days old, and a one-machine run whose tests took six times its setup or more.
+- **Notices** say when to refresh: a sharded run whose saved timings are over 30 days old, and a one-machine run whose tests took six times its setup or more.
 - Writing a variable needs a token with that permission; the default `GITHUB_TOKEN` can't.
 
 Two MySQL databases (primary and secondary):
