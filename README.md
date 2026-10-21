@@ -119,6 +119,7 @@ jobs:
 | `shard_count` | number | `4` | Number of shards when sharding is on, from 2 to 20. Any other value fails the job. |
 | `update_shards` | boolean | `false` | Run the whole suite with Pest's `--update-shards` and upload the `tests/.pest/shards.json` it writes as the artifact `shards-<phpunit_config_file>`. Needs `enable_sharding: false`. See [Time-balanced shards](#time-balanced-shards). |
 | `shard_variable` | string | `''` | With `update_shards`, the repository variable to save the suite's shard count and timings to, using the `TOKEN` secret. See [Shard settings in a repository variable](#shard-settings-in-a-repository-variable). |
+| `shard_reference_workflow` | string | `'checks.yml'` | With `shard_variable`, the workflow whose latest passing push run measures the suite for the shard count. |
 | `shard_timings` | string | `''` | The `timings` field of that variable, which a sharded run balances by in place of a committed `tests/.pest/shards.json`. |
 | `install_node_dependencies` | boolean | `true` | Run `yarn install` or `npm ci`. Set to `false` for rare apps without a `package.json`. |
 | `build_node_assets` | boolean | `true` | Run `yarn build` or `npm run build`. Set to `false` for apps without a frontend build step. |
@@ -217,9 +218,10 @@ with:
   shard_timings: ${{ fromJSON(vars.SHARDS_TESTS || '{"timings":""}').timings }}
 ```
 
-- **The count** is the largest that keeps each shard's tests running for at least three times its setup (dependencies, database, asset build), as measured in the refresh run. Each added shard pays for its setup again and saves less waiting than the one before, so past that point it mostly buys setup. A suite under six times its setup runs on one machine.
+- **The count** is the largest that keeps each shard's tests running for at least three times its setup (dependencies, database, asset build). Each added shard pays for its setup again and saves less waiting than the one before, so past that point it mostly buys setup. A suite under six times its setup runs on one machine.
+- **The times behind the count** come from the latest passing push run of `shard_reference_workflow` (default `checks.yml`) on the same branch: the suite's test steps added up, and the median of what each of its jobs spent on everything else. Its jobs are found by the refresh job's caller name, so give the suite's job the same `name` in both workflows. Pest's timing mode runs noticeably slower than a normal run, so the refresh's own time is used only when there is no such run.
 - **The refresh call must match the test run's** `runner`, `test_processes`, database and setup commands, since the count and timings only hold for the setup they were measured on.
-- **The variable** holds `{"count", "tests_seconds", "setup_seconds", "timings"}`, with the timings gzipped and base64-encoded to stay well under GitHub's 48 KB limit. `setup_seconds` includes 10 seconds for the runner's own start and clean-up. One variable per suite: two calls (a main and a browser config) each get their own, and need no merging.
+- **The variable** holds `{"count", "tests_seconds", "setup_seconds", "timings"}`, with the timings gzipped and base64-encoded to stay well under GitHub's 48 KB limit. One variable per suite: two calls (a main and a browser config) each get their own, and need no merging.
 - **Notices** say when to refresh: a sharded run whose saved timings are over 30 days old, and a one-machine run whose tests took six times its setup or more.
 - Writing a variable needs a token with that permission; the default `GITHUB_TOKEN` can't.
 

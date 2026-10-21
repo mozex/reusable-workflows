@@ -82,6 +82,11 @@ on:
         required: false
         type: string
         default: ''
+      shard_reference_workflow:
+        description: 'With shard_variable, the workflow file whose latest passing push run on this branch the shard count is measured from: its jobs for this suite (same caller job name) ran the way the count will be used. Pest''s timing mode runs noticeably slower than a normal run, so the refresh''s own time is only the fallback, for when no such run exists.'
+        required: false
+        type: string
+        default: 'checks.yml'
       shard_timings:
         description: 'The timings field of a shard_variable, for a sharded run to balance by in place of a committed tests/.pest/shards.json. Empty leaves the committed file, if any, in charge.'
         required: false
@@ -521,14 +526,21 @@ jobs:
       # The shard count is the largest that keeps each shard's tests running
       # for at least three times its setup. Every added shard bills its setup
       # again and saves less wall clock than the one before, so past that point
-      # it mostly buys setup. One machine measured the whole suite here, with
-      # the setup a shard would have, and 10s stands for the runner's own
-      # set-up and clean-up, which Record Start can't see.
+      # it mostly buys setup.
+      #
+      # The times come from the reference workflow's latest passing push run:
+      # the test steps of this suite's jobs added up, and the median of what
+      # each job spent on everything else (the jobs API times the whole job,
+      # as it is billed). The suite's jobs share this job's caller name
+      # ("Tests / Pest (Shard 1/3)" for "Tests / Pest"). Without such a run,
+      # this run's own times stand in, with 10s for the runner's set-up and
+      # clean-up, which Record Start can't see.
       - name: Save Shard Settings
         if: inputs.update_shards && inputs.shard_variable != '' && steps.tests.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.TOKEN }}
           VARIABLE: ${{ inputs.shard_variable }}
+          REFERENCE: ${{ inputs.shard_reference_workflow }}
         run: |
           # Pest skips the file when its own exit code was not 0, which happens
           # on a pass Run Tests rescued from a leaked Playwright server. The
@@ -536,17 +548,32 @@ jobs:
           if [ ! -f tests/.pest/shards.json ]; then
             echo "::warning::Pest wrote no tests/.pest/shards.json, so only the shard count is saved."
           fi
+          tests=$TESTS_SECONDS
           setup=$(( SETUP_SECONDS + 10 ))
-          count=$(( TESTS_SECONDS / (3 * setup) ))
+          source="this run"
+          if [ -n "$REFERENCE" ]; then
+            job=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --jq ".jobs[] | select(.runner_name == \"$RUNNER_NAME\") | .name" || true)
+            prefix="${job% / *}"
+            reference=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$REFERENCE" --branch "$GITHUB_REF_NAME" --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+            if [ -n "$job" ] && [ -n "$reference" ]; then
+              measured=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$reference/jobs?per_page=100" --jq "[.jobs[] | select(.name | startswith(\"$prefix / \")) | {job: ((.completed_at | fromdate) - (.started_at | fromdate)), tests: ([.steps[] | select(.conclusion == \"success\") | select(.name | startswith(\"Run Tests\")) | ((.completed_at | fromdate) - (.started_at | fromdate))] | add // 0)}] | select(length > 0) | \"\(map(.tests) | add) \(map(.job - .tests) | sort | .[length / 2 | floor])\"" || true)
+              if [ -n "$measured" ]; then
+                read -r tests setup <<< "$measured"
+                source="$REFERENCE run $reference"
+              fi
+            fi
+          fi
+          if [ "$setup" -lt 1 ]; then setup=1; fi
+          count=$(( tests / (3 * setup) ))
           if [ "$count" -lt 1 ]; then count=1; fi
           if [ "$count" -gt 20 ]; then count=20; fi
           # Every caller parses this variable before its jobs start, so a broken
           # value would stop all its runs: warnings go to stderr, encoding errors
           # throw. A class kept at 0.1s or more still counts when Pest shares the
           # classes out, where a rounded 0 would pile every such class on one shard.
-          php -d display_errors=stderr -r '$file = "tests/.pest/shards.json"; $timings = ""; if (is_file($file)) { $s = json_decode(file_get_contents($file), true, flags: JSON_THROW_ON_ERROR); $s["timings"] = array_map(fn ($t) => max(round($t, 1), 0.1), $s["timings"]); $timings = base64_encode(gzencode(json_encode($s, JSON_THROW_ON_ERROR), 9)); } echo json_encode(["count" => (int) $argv[1], "tests_seconds" => (int) $argv[2], "setup_seconds" => (int) $argv[3], "timings" => $timings], JSON_THROW_ON_ERROR);' "$count" "$TESTS_SECONDS" "$setup" > "$RUNNER_TEMP/shard-settings.json"
+          php -d display_errors=stderr -r '$file = "tests/.pest/shards.json"; $timings = ""; if (is_file($file)) { $s = json_decode(file_get_contents($file), true, flags: JSON_THROW_ON_ERROR); $s["timings"] = array_map(fn ($t) => max(round($t, 1), 0.1), $s["timings"]); $timings = base64_encode(gzencode(json_encode($s, JSON_THROW_ON_ERROR), 9)); } echo json_encode(["count" => (int) $argv[1], "tests_seconds" => (int) $argv[2], "setup_seconds" => (int) $argv[3], "timings" => $timings], JSON_THROW_ON_ERROR);' "$count" "$tests" "$setup" > "$RUNNER_TEMP/shard-settings.json"
           gh variable set "$VARIABLE" --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/shard-settings.json"
-          echo "Saved to \`$VARIABLE\`: $count shard(s), from ${TESTS_SECONDS}s of tests against ${setup}s of setup." >> "$GITHUB_STEP_SUMMARY"
+          echo "Saved to \`$VARIABLE\`: $count shard(s), from ${tests}s of tests against ${setup}s of setup per job, measured in $source." >> "$GITHUB_STEP_SUMMARY"
 
       # The same rule from the other side: a suite running on one machine that
       # has grown to six times its setup would now run at least two shards.
