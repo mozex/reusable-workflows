@@ -62,6 +62,17 @@ Give each instance its own directory, create the directories up front, and resta
 
 Two shared paths remain: the system PHP install (setup-php's per-job ini tweaks are identical and idempotent) and the Node tool cache, which is read-only once a version is cached. When you bump the PHP or Node version, let one job run alone first so the install isn't racing its siblings.
 
+### A prepared machine: tell the tests workflow
+
+On a machine you set up for CI, add `CI_PREPARED_RUNNER=1` to every runner instance's `.env`. The tests workflow then trusts what's installed instead of installing it per job:
+
+- **PHP:** it uses the machine's PHP instead of setup-php, which on a self-hosted runner runs apt on every job and rewrites the shared `php.ini`. The job checks the PHP version and every extension it asks for, fails with a list of what's missing, and writes its ini values to a directory only that job reads (through `PHP_INI_SCAN_DIR`).
+- **vendor/:** it stays in the workspace between runs instead of going through the cache service. It's rebuilt when `composer.json`, `composer.lock` or a composer-patches file changes, the same rule the cache key follows. Composer, npm and yarn keep their download caches in the runner's `HOME`.
+- **Redis:** each job starts it on a free port and sets `REDIS_PORT`, so two jobs don't fight over 6379.
+- **FFmpeg and Playwright:** the FFmpeg action is skipped, and Playwright installs browsers without `--with-deps`, so no job runs apt.
+
+The machine needs PHP with every extension your jobs list (with `php-config`, from the `-dev` package), Composer on `PATH`, `ffmpeg` if a job sets `install_ffmpeg`, and Playwright's system libraries (`npx playwright install-deps chromium`) if one installs Playwright. Set `PLAYWRIGHT_BROWSERS_PATH` in the `.env` too, so every runner instance shares one browser download.
+
 ## Tests
 
 Runs [Pest](https://pestphp.com) with Node install + Vite build baked in, plus optional parallel sharding, Playwright browsers, a separate Python test job, FFmpeg, extra apt packages, Redis, and MySQL or PostgreSQL with one or more databases.
